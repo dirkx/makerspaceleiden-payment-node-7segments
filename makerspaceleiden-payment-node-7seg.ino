@@ -14,7 +14,6 @@
 //    TM1637TinyDisplay
 //    Arduino_JSON
 //
-#include "/Users/dirkx/.passwd.h"
 
 #define VERSION "F1-01"
 
