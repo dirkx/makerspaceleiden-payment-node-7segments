@@ -67,6 +67,7 @@ TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 #define RFID_SCLK     19
 #define RFID_MOSI     23
 #define RFID_MISO     18
+
 #define RFID_RESET    21 
 #define RFID_IRQ      22
 
