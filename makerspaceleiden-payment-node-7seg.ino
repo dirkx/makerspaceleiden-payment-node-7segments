@@ -1,11 +1,11 @@
 // dirkx@webweaving.org, apache license, for the makerspaceleiden.nl
 //
 // Tools settings:
-//  Board OLIMEX ESP32-PoE (ISO of non-ISO)
+//  Board ESP32 WRover Module 
 //  Port: [the COM port your board has connected to]
 //
 // Boards used:
-//    OLIMEX ESP32-PoE (ISO)
+//    ESP32 WRover Module 
 //    MFRC522 (https://www.tinytronics.nl/shop/nl/communicatie-en-signalen/draadloos/rfid/rfid-kit-mfrc522-s50-mifare-met-kaart-en-key-tag)
 //    7 segment display ( https://www.hobbyelectronica.nl/product/4-digit-klok-display-module)
 //
@@ -58,18 +58,19 @@
 #include <MFRC522.h>
 #include <TM1637TinyDisplay.h>
 
-#define DISPLAY_CLK 2
-#define DISPLAY_DIO 4
+#define DISPLAY_CLK 25
+#define DISPLAY_DIO 26
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 
-#define RFID_CS       13 // SDA on board, SS in library
-#define RFID_SCLK     14
-#define RFID_MOSI     15
-#define RFID_MISO     16
-#define RFID_RESET    32 // not soldered at this time !
+#define RFID_CS       05 // default VSPI wiring
+#define RFID_SCLK     19
+#define RFID_MOSI     23
+#define RFID_MISO     18
+#define RFID_RESET    21 
+#define RFID_IRQ      22
 
-SPIClass SDSPI(HSPI);
+SPIClass SDSPI(VSPI);
 MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &SDSPI);
 MFRC522 mfrc522 = MFRC522(&spiDevice);
 
