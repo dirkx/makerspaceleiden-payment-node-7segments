@@ -15,8 +15,8 @@ QUAD7_HH=19.5;
 QUAD7_HO=QUAD7_HD/2+1;
 QUAD7_H_ASSYM=1;
 
-showdev=0;
-studs=0;
+showdev=1;
+studs=1;
 version="v1.03";
 /*
    v1.01   white print 15/10/2021 for box with transparant cover.
@@ -211,6 +211,6 @@ translate([0,9,IH-12])
 translate([0,28,IH-PH-8]) 
    mountingboard(IH-PH-8);
 
-if (showdev)
+if (showdev==2)
    translate([-2,-22,0]) cube([5,5,IH]);    
 

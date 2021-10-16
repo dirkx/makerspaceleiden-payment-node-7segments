@@ -1,11 +1,11 @@
 // dirkx@webweaving.org, apache license, for the makerspaceleiden.nl
 //
 // Tools settings:
-//  Board ESP32 WRover Module 
+//  Board ESP32 WRover Module
 //  Port: [the COM port your board has connected to]
 //
 // Boards used:
-//    ESP32 WRover Module 
+//    ESP32 WRover Module
 //    MFRC522 (https://www.tinytronics.nl/shop/nl/communicatie-en-signalen/draadloos/rfid/rfid-kit-mfrc522-s50-mifare-met-kaart-en-key-tag)
 //    7 segment display ( https://www.hobbyelectronica.nl/product/4-digit-klok-display-module)
 //
@@ -46,7 +46,7 @@
 #define SKU 1
 #endif
 
-#define HTTP_TIMEOUT (5000)
+#define HTTP_TIMEOUT (15000)
 
 
 #include <WiFi.h>
@@ -57,33 +57,38 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <TM1637TinyDisplay.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
 #define DISPLAY_CLK 25
 #define DISPLAY_DIO 26
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 
-#define RFID_CS       05 // default VSPI wiring
-#define RFID_SCLK     19
+#define RFID_CS       15 // default VSPI wiring
+#define RFID_SCLK     18
 #define RFID_MOSI     23
-#define RFID_MISO     18
+#define RFID_MISO     19
 
-#define RFID_RESET    21 
-#define RFID_IRQ      22
+#define RFID_RESET    22
+#define RFID_IRQ      21
 
-SPIClass SDSPI(VSPI);
-MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &SDSPI);
+SPIClass RFID_SPI(VSPI);
+MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &RFID_SPI);
 MFRC522 mfrc522 = MFRC522(&spiDevice);
 
 // Very ugly global vars - used to communicate between the REST call and the rest.
 //
 char tag[sizeof(mfrc522.uid.uidByte) * 4 + 1 ] = { 0 };
-char * description = "Maker Pie";
-double amount = 3.14;
+char * description = "no-price-list";
+double amount = 0.00;
+
+enum { BOOT = 0, PRICES, RUN } state = BOOT;
 
 static int setupRFID()
 {
-  SDSPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
+  RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
   mfrc522.PCD_Init();
   Serial.print("RFID Scanner: ");
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
@@ -156,7 +161,10 @@ JSONVar rest(const char *url, int * statusCode) {
   static JSONVar res;
 
   client->setCACert(ca_root);
+  // client->setInsecure();
   https.setTimeout(HTTP_TIMEOUT);
+
+  // Serial.println(url);
 
   if (!https.begin(*client, url)) {
     Serial.println("setup fail");
@@ -203,8 +211,8 @@ int setupPrices(int mySKU) {
 
   snprintf(buff, sizeof(buff), SKU_URL "/%d", mySKU);
   JSONVar res = rest(buff, &httpCode);
-  Serial.println(httpCode);
 
+  // {"id": 1, "name": "Bier", "description": "Bier, Pijpje of flesje", "price": 1.0}
   if (httpCode == 200) {
     description = strdup(res["description"]);
     amount = res["price"];
@@ -270,12 +278,20 @@ void setup()
 
   display.showString("conn");
 
+  byte mac[6];
+  char terminalName[128];
+
+  WiFi.macAddress(mac);
+  snprintf(terminalName, sizeof(terminalName), "%s-2x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
+  Serial.print(terminalName);
+  Serial.println(" Wifi connecting");
+
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Rebooting, wifi issue" );
     display.showString("FAIL");
     delay(5000);
     ESP.restart();
-  }
+  };
   Serial.println("Connected.");
   yield();
 
@@ -284,13 +300,46 @@ void setup()
   configTime(0, 0, "nl.pool.ntp.org");
   yield();
 
-  if (setupPrices(SKU) != 200) {
-    for (int i = 0; i < 10; i++)
-      display.showString("no prices ");
-    ESP.restart();
-  }
+  ArduinoOTA.setHostname(terminalName);
+#ifdef OTA_HASH
+  ArduinoOTA.setPasswordHash(OTA_HASH);
+#else
+#ifdef OTA_PASSWD
+  ArduinoOTA.setPassword(OTA_PASSWD);
+#endif
+#endif
 
-  SDSPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
+  ArduinoOTA
+  .onStart([]() {
+    display.showString("PROG");
+
+  })
+  .onEnd([]() {
+    display.showString("Done");
+  })
+  .onProgress([](unsigned int progress, unsigned int total) {
+    static int l = -100;
+    int w = 100 * progress / total;
+    if (w != l) {
+      char fw[5];
+      snprintf(fw, sizeof(fw), "F%3d", w);
+      display.showString(fw);
+    };
+    l = w;
+  })
+  .onError([](ota_error_t error) {
+    char * label;
+    if (error == OTA_AUTH_ERROR) label = "Auth Failed";
+    else if (error == OTA_BEGIN_ERROR) label = "Begin Failed";
+    else if (error == OTA_CONNECT_ERROR) label = "Connect Failed";
+    else if (error == OTA_RECEIVE_ERROR) label = "Receive Failed";
+    else if (error == OTA_END_ERROR) label = "End Failed";
+    else label = "Uknown error";
+    display.showString(label);
+  });
+
+
+  RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
   mfrc522.PCD_Init();
   Serial.print("RFID Scanner: ");
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
@@ -299,16 +348,45 @@ void setup()
 
   display.setBrightness(BRIGHT_HIGH / 3);
   display.showNumber(amount, 2);
+  ArduinoOTA.begin();
+
+  state = PRICES;
 }
 
 void loop()
 {
+  ArduinoOTA.handle();
+  if (state == PRICES) {
+    static unsigned long lst = 0;
+    if (millis() - lst > 15 * 1000 || lst == 0) {
+      lst = millis();
+      Serial.println("Fetch prices");
+      if (setupPrices(SKU) != 200) {
+        display.showString("no prices ");
+        if (millis() > 180 * 1000)
+          ESP.restart();
+        return;
+      };
+      display.showNumber(amount, 2);
+      state = RUN;
+    };
+  }
+
   static unsigned long t = millis();
   if (millis() - t > 2500) {
     time_t now = time(nullptr);
-    Serial.print(ctime(&now));
+    char * tstr = ctime(&now);
+    // Sat Oct 16 20:53:36 2021;
+    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 300) {
+      Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
+      ESP.restart();
+    }
+    Serial.print(tstr);
     t = millis();
   }
+
+  if (state < RUN)
+    return;
 
   if (loopRFID()) {
     display.setBrightness(BRIGHT_HIGH);
