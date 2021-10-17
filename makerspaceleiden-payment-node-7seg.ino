@@ -48,7 +48,6 @@
 
 #define HTTP_TIMEOUT (15000)
 
-
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -77,6 +76,8 @@ TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 SPIClass RFID_SPI(VSPI);
 MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &RFID_SPI);
 MFRC522 mfrc522 = MFRC522(&spiDevice);
+
+char terminalName[128] = TERMINAL_NAME;
 
 // Very ugly global vars - used to communicate between the REST call and the rest.
 //
@@ -162,8 +163,10 @@ JSONVar rest(const char *url, int * statusCode) {
 
   client->setCACert(ca_root);
   // client->setInsecure();
-  https.setTimeout(HTTP_TIMEOUT);
 
+#ifdef HTTP_TIMEOUT
+  https.setTimeout(HTTP_TIMEOUT);
+#endif
   // Serial.println(url);
 
   if (!https.begin(*client, url)) {
@@ -171,6 +174,7 @@ JSONVar rest(const char *url, int * statusCode) {
     return 999;
   };
 
+  https.setUserAgent(terminalName);
 #ifdef PAYMENT_TERMINAL_BEARER
   https.addHeader("X-Bearer", PAYMENT_TERMINAL_BEARER);
 #endif
@@ -228,17 +232,17 @@ int payByREST(char *tag, float amount) {
   char desc[128];
   char tmp[128];
 
-  snprintf(desc, sizeof(desc), "%s. Payment at terminal %s", description, TERMINAL_NAME);
+  snprintf(desc, sizeof(desc), "%s. Payment at terminal %s", description, terminalName);
 
   // avoid logging the tag for privacy/security-by-obscurity reasons.
   //
   snprintf(buff, sizeof(buff), PAYMENT_URL "?node=%s&src=%s&amount=%.2f&description=%s",
-           TERMINAL_NAME, "XX-XX-XX-XXX", amount, _argencode(tmp, sizeof(tmp), desc));
+           terminalName, "XX-XX-XX-XXX", amount, _argencode(tmp, sizeof(tmp), desc));
   Serial.print("URL: ");
   Serial.println(buff);
 
   snprintf(buff, sizeof(buff), PAYMENT_URL "?node=%s&src=%s&amount=%.2f&description=%s",
-           TERMINAL_NAME, tag, amount, _argencode(tmp, sizeof(tmp), desc));
+           terminalName, tag, amount, _argencode(tmp, sizeof(tmp), desc));
 
   int httpCode = 0;
   JSONVar res = rest(buff, &httpCode);
@@ -279,7 +283,6 @@ void setup()
   display.showString("conn");
 
   byte mac[6];
-  char terminalName[128];
 
   WiFi.macAddress(mac);
   snprintf(terminalName, sizeof(terminalName), "%s-2x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
@@ -347,7 +350,7 @@ void setup()
   Serial.println("Starting loop");
 
   display.setBrightness(BRIGHT_HIGH / 3);
-  display.showNumber(amount, 2);
+  display.showString("----");
   ArduinoOTA.begin();
 
   state = PRICES;
@@ -377,7 +380,7 @@ void loop()
     time_t now = time(nullptr);
     char * tstr = ctime(&now);
     // Sat Oct 16 20:53:36 2021;
-    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 30*1000) {
+    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 30 * 1000) {
       Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
       ESP.restart();
     }
