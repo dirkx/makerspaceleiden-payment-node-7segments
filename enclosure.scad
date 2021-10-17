@@ -15,9 +15,9 @@ QUAD7_HH=19.5;
 QUAD7_HO=QUAD7_HD/2+1;
 QUAD7_H_ASSYM=1;
 
-showdev=1;
-studs=1;
-version="v1.03";
+showdev=0;
+studs=0;
+version="v1.04";
 /*
    v1.01   white print 15/10/2021 for box with transparant cover.
    v1.02   scanner 1mm lower, whole plate 2mm lower, rfid pillars narrower
@@ -25,6 +25,9 @@ version="v1.03";
            display mm shifted to right for connector assymetry. text deeper
            and bolder.
    v1.03   Standoffs 2mm shorter.
+   v1.04   Lowered main board by 2mm to prevent shorting 7x4 display 
+           pins (Issue #2). Removed unused mid studs. Wider tiewrap
+           holes for stud (Issue #3).
 */
 module quad_holes(r=QUAD7_HD/2,h=10,top=1) {
    r2=r; r1=r*top;
@@ -145,7 +148,7 @@ module mb_pins(r=MB_HH/2,h=MB_T+0.01) {
        translate([MB_P,MB_P,-0.01]) cylinder(r=r,h=h);
        translate([0,MB_P,-0.01]) cylinder(r=r,h=h);
    };
-   translate([(MB_W)/2,(MB_H-MB_V)/2,0]) {
+   if (0) translate([(MB_W)/2,(MB_H-MB_V)/2,0]) {
        translate([0,0,-0.01]) cylinder(r=r,h=h);
        translate([0,MB_V,-0.01]) cylinder(r=r,h=h);
    };
@@ -166,18 +169,24 @@ module mb(h=10) {
        // wire hole
        translate([MB_W/2,MB_H-15,-0.01]) cylinder(r=5,h=3);
        // tiewrap holes
-       translate([MB_W/2-5,MB_H-40,-0.01]) cylinder(r=2,h=3);
-       translate([MB_W/2+5,MB_H-40,-0.01]) cylinder(r=2,h=3);
+       translate([MB_W/2-10,MB_H-48,-0.01]) cylinder(r=2,h=3);
+       translate([MB_W/2+10,MB_H-48,-0.01]) cylinder(r=2,h=3);
+       translate([MB_W/2-5,MB_H-73,-0.01]) cylinder(r=2,h=3);
+       translate([MB_W/2+5,MB_H-73,-0.01]) cylinder(r=2,h=3);
+
+
        translate([MB_W/2,MB_H-30,-0.4+MB_T]) 
            linear_extrude(height = 1)
            text(version,halign="center", valign="center",size=8,font="Gill Sans:style=Bold");
-       translate([MB_W/2,MB_H-53,-0.4+MB_T]) 
-           linear_extrude(height = 1)
-           text("makerspaceleiden.nl",halign="center", valign="center",size=3,font="Gill Sans:style=Bold");
-       translate([MB_W/2,MB_H-58,-0.4+MB_T]) 
-           linear_extrude(height = 1)
-           text("2021-10-15 / paymentnode",halign="center", valign="center",size=2.5, font="Gill Sans:style=Bold");
 };
+       translate([MB_W/2,MB_H-53,-0.1+MB_T]) 
+           linear_extrude(height = 0.5)
+           text("makerspaceleiden.nl",halign="center", valign="center",
+                size=3,font="Gill Sans:style=Bold");
+       translate([MB_W/2,MB_H-58,-0.1+MB_T]) 
+           linear_extrude(height = 0.5)
+           text("2021-10-15 / paymentnode",halign="center", valign="center",
+                size=2.5, font="Gill Sans:style=Bold");
 if (studs == 0) {
    translate([-70,0,0]) {
    difference() {
@@ -196,7 +205,7 @@ module mountingboard(h=10) {
        };
 };
 
-PH=14; // package height/highest board.
+PH=16; // package height/highest board.
 IH=40; // insighed height
 
 translate([0,0,IH]) 
