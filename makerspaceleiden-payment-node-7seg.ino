@@ -15,7 +15,7 @@
 //    Arduino_JSON
 //
 
-#define VERSION "F1-01"
+#define VERSION "F1-02"
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -38,12 +38,16 @@
 #define SDU_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/pay"
 #endif
 
+#ifndef SKU_URL
+#define SKU_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/sku"
+#endif
+
 #ifndef TERMINAL_NAME
-#define TERMINAL_NAME "Bierplaat-MSL"
+#define TERMINAL_NAME "Koffietap-MSL"
 #endif
 
 #ifndef SKU
-#define SKU 1
+#define SKU 2
 #endif
 
 #define HTTP_TIMEOUT (15000)
@@ -65,13 +69,22 @@
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 
-#define RFID_CS       15 // default VSPI wiring
+
+#if SKU == 1
+#define RFID_RESET    22 
+#define RFID_IRQ      21
+#define RFID_CS       15 
 #define RFID_SCLK     18
 #define RFID_MOSI     23
 #define RFID_MISO     19
-
-#define RFID_RESET    22
-#define RFID_IRQ      21
+#else
+#define RFID_CS       5 // default VSPI wiring
+#define RFID_SCLK     18
+#define RFID_MOSI     23
+#define RFID_MISO     19
+#define RFID_RESET    21 // these two pins swapped on the older beer-node.
+#define RFID_IRQ      22
+#endif
 
 SPIClass RFID_SPI(VSPI);
 MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &RFID_SPI);
