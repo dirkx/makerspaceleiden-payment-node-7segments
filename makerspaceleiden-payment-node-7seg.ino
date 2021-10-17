@@ -87,7 +87,7 @@ double amount = 0.00;
 
 enum { BOOT = 0, PRICES, RUN } state = BOOT;
 
-static int setupRFID()
+static void setupRFID()
 {
   RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
   mfrc522.PCD_Init();
@@ -285,7 +285,7 @@ void setup()
   byte mac[6];
 
   WiFi.macAddress(mac);
-  snprintf(terminalName, sizeof(terminalName), "%s-2x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
+  snprintf(terminalName, sizeof(terminalName), "%s-%02x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
   Serial.print(terminalName);
   Serial.println(" Wifi connecting");
 
