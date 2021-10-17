@@ -377,7 +377,7 @@ void loop()
     time_t now = time(nullptr);
     char * tstr = ctime(&now);
     // Sat Oct 16 20:53:36 2021;
-    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 300) {
+    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 30*1000) {
       Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
       ESP.restart();
     }
