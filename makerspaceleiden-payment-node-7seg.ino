@@ -15,7 +15,7 @@
 //    Arduino_JSON
 //
 
-#define VERSION "F1-02"
+#define VERSION "F1-03"
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -68,7 +68,6 @@
 #define DISPLAY_DIO 26
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
-
 
 #if SKU == 1
 #define RFID_RESET    22 
@@ -390,14 +389,18 @@ void loop()
 
   static unsigned long t = millis();
   if (millis() - t > 2500) {
+    static unsigned long rnd_offset = random(0,3600);
     time_t now = time(nullptr);
+    Serial.print(ctime(&now));
+    
+    now -=- rnd_offset;
     char * tstr = ctime(&now);
     // Sat Oct 16 20:53:36 2021;
-    if (strncmp(tstr + 11, "06:00", 5) == 0 && millis() > 30 * 1000) {
+    if (strncmp(tstr + 11, "04:00", 5) == 0 && millis() > 300 * 1000) {
       Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
       ESP.restart();
     }
-    Serial.print(tstr);
+    
     t = millis();
   }
 
