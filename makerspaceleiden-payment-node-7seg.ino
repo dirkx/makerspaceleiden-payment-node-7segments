@@ -15,7 +15,7 @@
 //    Arduino_JSON
 //
 
-#define VERSION "F1-03"
+#define VERSION "F1-04"
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -43,11 +43,11 @@
 #endif
 
 #ifndef TERMINAL_NAME
-#define TERMINAL_NAME "Koffietap-MSL"
+#define TERMINAL_NAME "Biertap-MSL"
 #endif
 
 #ifndef SKU
-#define SKU 2
+#define SKU 1
 #endif
 
 #define HTTP_TIMEOUT (15000)
@@ -70,9 +70,9 @@
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 
 #if SKU == 1
-#define RFID_RESET    22 
+#define RFID_RESET    22
 #define RFID_IRQ      21
-#define RFID_CS       15 
+#define RFID_CS       15
 #define RFID_SCLK     18
 #define RFID_MOSI     23
 #define RFID_MISO     19
@@ -98,6 +98,7 @@ char * description = "no-price-list";
 double amount = 0.00;
 
 enum { BOOT = 0, PRICES, RUN } state = BOOT;
+unsigned long device_specific_reboot_offset = 0;
 
 static void setupRFID()
 {
@@ -300,6 +301,8 @@ void setup()
   snprintf(terminalName, sizeof(terminalName), "%s-%02x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
   Serial.print(terminalName);
   Serial.println(" Wifi connecting");
+  
+  device_specific_reboot_offset = (*(unsigned short*)(mac+4)) % 3600;
 
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Rebooting, wifi issue" );
@@ -389,18 +392,17 @@ void loop()
 
   static unsigned long t = millis();
   if (millis() - t > 2500) {
-    static unsigned long rnd_offset = random(0,3600);
     time_t now = time(nullptr);
     Serial.print(ctime(&now));
-    
-    now -=- rnd_offset;
+
+    now -= device_specific_reboot_offset;
     char * tstr = ctime(&now);
     // Sat Oct 16 20:53:36 2021;
     if (strncmp(tstr + 11, "04:00", 5) == 0 && millis() > 300 * 1000) {
       Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
       ESP.restart();
     }
-    
+
     t = millis();
   }
 
