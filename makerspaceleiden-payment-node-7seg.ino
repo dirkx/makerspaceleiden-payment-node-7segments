@@ -15,7 +15,7 @@
 //    Arduino_JSON
 //
 
-#define VERSION "F1-04"
+#define VERSION "F1-05"
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -196,6 +196,13 @@ JSONVar rest(const char *url, int * statusCode) {
   Serial.print("Result: ");
   Serial.println(httpCode);
 
+  if (httpCode < 0) {
+    Serial.println("Rebooting, wifi issue" );
+    display.showString("NET FAIL");
+    delay(1000);
+    ESP.restart();
+  }
+
   if (httpCode == 200) {
     String payload = https.getString();
     bool ok = false;
@@ -299,6 +306,8 @@ void setup()
 
   WiFi.macAddress(mac);
   snprintf(terminalName, sizeof(terminalName), "%s-%02x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
+  WiFi.setHostname(terminalName);
+
   Serial.print(terminalName);
   Serial.println(" Wifi connecting");
   
