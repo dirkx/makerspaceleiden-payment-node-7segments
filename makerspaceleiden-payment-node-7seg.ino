@@ -15,7 +15,6 @@
 //    Arduino_JSON
 //
 
-#define VERSION "F1-05"
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -42,20 +41,13 @@
 #define SKU_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/sku"
 #endif
 
-#ifndef TERMINAL_NAME
-#define TERMINAL_NAME "Biertap-MSL"
-#endif
-
 #ifndef SKU
 #define SKU 1
 #endif
 
-#define HTTP_TIMEOUT (15000)
-
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include "ca_root.h"
 #include <Arduino_JSON.h>
 #include <SPI.h>
 #include <MFRC522.h>
@@ -63,6 +55,9 @@
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+
+#include "global.h"
+#include "rest.h"
 
 #define DISPLAY_CLK 25
 #define DISPLAY_DIO 26
@@ -89,16 +84,22 @@ SPIClass RFID_SPI(VSPI);
 MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &RFID_SPI);
 MFRC522 mfrc522 = MFRC522(&spiDevice);
 
-char terminalName[128] = TERMINAL_NAME;
-
 // Very ugly global vars - used to communicate between the REST call and the rest.
 //
-char tag[sizeof(mfrc522.uid.uidByte) * 4 + 1 ] = { 0 };
-char * description = "no-price-list";
-double amount = 0.00;
 
-enum { BOOT = 0, PRICES, RUN } state = BOOT;
-unsigned long device_specific_reboot_offset = 0;
+char terminalName[64] = TERMINAL_NAME;
+int NA = 0;
+char **amounts = NULL;
+char **prices = NULL;
+char **descs = NULL;
+int amount = 0;
+int default_item = -1;
+double amount_no_ok_needed = AMOUNT_NO_OK_NEEDED;
+const char * version = VERSION;
+unsigned long device_specific_reboot_offset;
+String label;
+char tag[128];
+state_t md = BOOT;
 
 static void setupRFID()
 {
@@ -140,147 +141,6 @@ static int loopRFID() {
   return 1;
 }
 
-
-static unsigned char hex_digit(unsigned char c) {
-  return "0123456789ABCDEF"[c & 0x0F];
-};
-
-char *_argencode(char *dst, size_t n, char *src)
-{
-  char c, *d = dst;
-  while ((c = *src++) != 0)
-  {
-    if (c == ' ') {
-      *d++ = '+';
-    } else if (strchr("!*'();:@&=+$,/?%#[] ", c) || c < 32 || c > 127 ) {
-      *d++ = '%';
-      *d++ = hex_digit(c >> 4);
-      *d++ = hex_digit(c);
-    } else {
-      *d++ = c;
-    };
-    if (d + 1 >= dst + n) {
-      Serial.println("Warning - buffer was too small. Truncating.");
-      break;
-    }
-  };
-  *d++ = '\0';
-  return dst;
-}
-
-JSONVar rest(const char *url, int * statusCode) {
-  WiFiClientSecure *client = new WiFiClientSecure;
-  String label = "unset";
-  HTTPClient https;
-  static JSONVar res;
-
-  client->setCACert(ca_root);
-  // client->setInsecure();
-
-#ifdef HTTP_TIMEOUT
-  https.setTimeout(HTTP_TIMEOUT);
-#endif
-  // Serial.println(url);
-
-  if (!https.begin(*client, url)) {
-    Serial.println("setup fail");
-    return 999;
-  };
-
-  https.setUserAgent(terminalName);
-#ifdef PAYMENT_TERMINAL_BEARER
-  https.addHeader("X-Bearer", PAYMENT_TERMINAL_BEARER);
-#endif
-  int httpCode = https.GET();
-
-  Serial.print("Result: ");
-  Serial.println(httpCode);
-
-  if (httpCode < 0) {
-    Serial.println("Rebooting, wifi issue" );
-    display.showString("NET FAIL");
-    delay(1000);
-    ESP.restart();
-  }
-
-  if (httpCode == 200) {
-    String payload = https.getString();
-    bool ok = false;
-
-    Serial.print("Payload: ");
-    Serial.println(payload);
-    res = JSON.parse(payload);
-  };
-
-  if (httpCode != 200) {
-    label = https.errorToString(httpCode);
-
-    if (label.length() < 2)
-      label = https.getString();
-
-    Serial.print("REST payment call failed: ");
-    Serial.print(httpCode);
-    Serial.print("-");
-    Serial.println(label);
-  };
-  https.end();
-  *statusCode = httpCode;
-
-  return res;
-}
-
-int setupPrices(int mySKU) {
-  char buff[512];
-  int httpCode = 0;
-
-  snprintf(buff, sizeof(buff), SKU_URL "/%d", mySKU);
-  JSONVar res = rest(buff, &httpCode);
-
-  // {"id": 1, "name": "Bier", "description": "Bier, Pijpje of flesje", "price": 1.0}
-  if (httpCode == 200) {
-    description = strdup(res["description"]);
-    amount = res["price"];
-
-    if (amount >= 0.05 && amount <= 10.00 && strlen(description) > 1)
-      return 200;
-  };
-  return httpCode == 200 ? 999 : httpCode;
-}
-
-int payByREST(char *tag, float amount) {
-  char buff[512];
-  char desc[128];
-  char tmp[128];
-
-  snprintf(desc, sizeof(desc), "%s. Payment at terminal %s", description, terminalName);
-
-  // avoid logging the tag for privacy/security-by-obscurity reasons.
-  //
-  snprintf(buff, sizeof(buff), PAYMENT_URL "?node=%s&src=%s&amount=%.2f&description=%s",
-           terminalName, "XX-XX-XX-XXX", amount, _argencode(tmp, sizeof(tmp), desc));
-  Serial.print("URL: ");
-  Serial.println(buff);
-
-  snprintf(buff, sizeof(buff), PAYMENT_URL "?node=%s&src=%s&amount=%.2f&description=%s",
-           terminalName, tag, amount, _argencode(tmp, sizeof(tmp), desc));
-
-  int httpCode = 0;
-  JSONVar res = rest(buff, &httpCode);
-
-  if (httpCode == 200) {
-    bool ok = false;
-    if (res.hasOwnProperty("result"))
-      ok = (bool) res["result"];
-
-    if (!ok) {
-      Serial.println("200 Ok, but false / incpmplete result.");
-      httpCode = 600;
-    }
-  };
-
-  return httpCode;
-}
-
 void setupDisplay() {
   display.setBrightness(BRIGHT_7);
   display.showString(VERSION);
@@ -290,8 +150,18 @@ void setupDisplay() {
 void setup()
 {
   Serial.begin(115200);
-  Serial.println("\n\n\nStarted, build " __DATE__ " " __TIME__ "\n" __FILE__);
+  md = BOOT;
+
+  byte mac[6];
+  WiFi.macAddress(mac);
+  snprintf(terminalName, sizeof(terminalName), "%s-%s-%02x%02x%02x", TERMINAL_NAME, VERSION, mac[3], mac[4], mac[5]);
+  device_specific_reboot_offset = (*(unsigned short*)(mac + 4)) % 3600;
+
+  Serial.println("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
+  Serial.println(terminalName);
+
   setupDisplay();
+  setupAuth(terminalName);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_NETWORK, WIFI_PASSWD);
@@ -302,16 +172,11 @@ void setup()
 
   display.showString("conn");
 
-  byte mac[6];
-
-  WiFi.macAddress(mac);
-  snprintf(terminalName, sizeof(terminalName), "%s-%02x%02x%02x", TERMINAL_NAME, mac[3], mac[4], mac[5]);
   WiFi.setHostname(terminalName);
 
   Serial.print(terminalName);
   Serial.println(" Wifi connecting");
-  
-  device_specific_reboot_offset = (*(unsigned short*)(mac+4)) % 3600;
+
 
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Rebooting, wifi issue" );
@@ -342,6 +207,8 @@ void setup()
 
   })
   .onEnd([]() {
+    // prevent a cleversod uplading a special binary. ignore the hardware/serial angle
+    wipekeys();
     display.showString("Done");
   })
   .onProgress([](unsigned int progress, unsigned int total) {
@@ -377,63 +244,99 @@ void setup()
   display.showString("----");
   ArduinoOTA.begin();
 
-  state = PRICES;
+  md = WAITING_FOR_NTP;
+}
+
+
+static void loop_RebootAtMidnight() {
+  static unsigned long lst = millis();
+  if (millis() - lst < 60 * 1000)
+    return;
+  lst = millis();
+
+  static unsigned long debug = 0;
+  if (millis() - debug > 60 * 60 * 1000) {
+    debug = millis();
+    time_t now = time(nullptr);
+    char * p = ctime(&now);
+    p[5 + 11 + 3] = 0;
+    Serial.printf("%s Heap: %d Kb\n", p, (512 + heap_caps_get_free_size(MALLOC_CAP_INTERNAL)) / 1024UL);
+  }
+  time_t now = time(nullptr);
+  if (now < 3600)
+    return;
+
+#ifdef AUTO_REBOOT_TIME
+  now += device_specific_reboot_offset;
+  char * p = ctime(&now);
+  p += 11;
+  p[5] = 0;
+
+  if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600UL) {
+    Serial.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
+    ESP.restart();
+  }
+#endif
 }
 
 void loop()
 {
   ArduinoOTA.handle();
-  if (state == PRICES) {
-    static unsigned long lst = 0;
-    if (millis() - lst > 15 * 1000 || lst == 0) {
-      lst = millis();
-      Serial.println("Fetch prices");
-      if (setupPrices(SKU) != 200) {
-        display.showString("no prices ");
-        if (millis() > 180 * 1000)
-          ESP.restart();
-        return;
+  loop_RebootAtMidnight();
+  
+  switch (md) {
+    case WAITING_FOR_NTP:
+      display.showString("ntp");
+      if (time(nullptr) > 3600)
+        md = FETCH_CA;
+      return;
+      break;
+    case FETCH_CA:
+      display.showString("ca");
+      fetchCA();
+      return;
+    case REGISTER:
+      display.showString("reg");
+      registerDevice();
+      return;
+    case WAIT_FOR_REGISTER_SWIPE:
+      display.showString("pair");
+      if (loopRFID())
+        registerDevice();
+      return;
+    case REGISTER_PRICELIST:
+      display.showString("get");
+      if (fetchPricelist())
+        md = ENTER_AMOUNT;
+      return;
+    case ENTER_AMOUNT:
+      display.setBrightness(BRIGHT_HIGH / 3);
+      display.showNumber(atof(prices[amount]), 2);
+      if (NA > 0 && loopRFID()) {
+        display.setBrightness(BRIGHT_HIGH);
+        display.showString("[--]");
+        int status = payByREST(tag, prices[amount], descs[amount]);
+        if (status == 200) {
+          display.showString("PAID");
+          delay(500);
+        } else {
+          for (int i = 0; i < 4; i++) {
+            display.showString("FAIL");
+            delay(500);
+            display.showNumber(status);
+            delay(500);
+          };
+        };
+        display.setBrightness(BRIGHT_HIGH / 3);
+        display.showNumber(amount, 2);
       };
-      display.showNumber(amount, 2);
-      state = RUN;
-    };
-  }
-
-  static unsigned long t = millis();
-  if (millis() - t > 2500) {
-    time_t now = time(nullptr);
-    Serial.print(ctime(&now));
-
-    now -= device_specific_reboot_offset;
-    char * tstr = ctime(&now);
-    // Sat Oct 16 20:53:36 2021;
-    if (strncmp(tstr + 11, "04:00", 5) == 0 && millis() > 300 * 1000) {
-      Serial.println("Nightly reboot; in case of memory leaks and fetches new prices.");
+    case WIFI_FAIL_REBOOT:
+      for (int i = 0; i < 10; i++) {
+        display.showString("NET FAIL");
+        delay(1000);
+      };
       ESP.restart();
-    }
-
-    t = millis();
-  }
-
-  if (state < RUN)
-    return;
-
-  if (loopRFID()) {
-    display.setBrightness(BRIGHT_HIGH);
-    display.showString("[--]");
-    int status = payByREST(tag, amount);
-    if (status == 200) {
-      display.showString("PAID");
-      delay(500);
-    } else {
-      for (int i = 0; i < 4; i++) {
-        display.showString("FAIL");
-        delay(500);
-        display.showNumber(status);
-        delay(500);
-      };
-    };
-    display.setBrightness(BRIGHT_HIGH / 3);
-    display.showNumber(amount, 2);
+    default:
+      break;
   };
 }
