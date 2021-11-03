@@ -164,7 +164,7 @@ void setup()
 
   byte mac[6];
   WiFi.macAddress(mac);
-  snprintf(terminalName, sizeof(terminalName), "%s-%s-%02x%02x%02x", TERMINAL_NAME, VERSION, mac[3], mac[4], mac[5]);
+  snprintf(terminalName, sizeof(terminalName), "%s-%s-%02x%02x%02x", TERMINAL_NAME, 1 + VERSION, mac[3], mac[4], mac[5]);
   device_specific_reboot_offset = (*(unsigned short*)(mac + 4)) % 3600;
 
   Serial.println("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
@@ -366,7 +366,7 @@ void loop()
       { static unsigned long last = millis();
         if (millis() - last > 10 * 1000)
           ESP.restart();
-        display.showString("NET FAIL");
+        display.showString("FFER");
       };
       break;
     default:

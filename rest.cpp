@@ -480,7 +480,6 @@ bool fetchPricelist() {
   const char * nme = res["name"];
   const char * desc = res["description"];
   if (!nme || !strlen(nme)) {
-    Log.println("Bogus SKU or not yet assiged a station");
     updateDisplay_progressText("no station assigned in CRM");
     return false;
   }
@@ -497,7 +496,7 @@ bool fetchPricelist() {
 
   double  cap = res["max_permission_amount"];
   if (cap > 0) {
-    Log.printf("Non default permission amount of %.2% euro\n", cap);
+    Debug.printf("Non default permission amount of %.2% euro\n", cap);
     amount_no_ok_needed = cap;
   };
   amounts = (char **) malloc(sizeof(char *) * len);
@@ -517,7 +516,6 @@ bool fetchPricelist() {
 
     Log.printf("%12s %c %s\n", amounts[i], i == default_item ? '*' : ' ', prices[i]);
   };
-  Log.printf("%d items total\n", len);
   NA = len;
   updateDisplay_progressText("got prices");
   return true;
