@@ -57,7 +57,10 @@
 #include <ArduinoOTA.h>
 
 #include "global.h"
+#include "log.h"
 #include "rest.h"
+#include "SyslogStream.h"
+#include "TelnetSerialStream.h"
 
 #define DISPLAY_CLK 25
 #define DISPLAY_DIO 26
@@ -101,11 +104,18 @@ String label;
 char tag[128];
 state_t md = BOOT;
 
+#ifdef SYSLOG_HOST
+SyslogStream syslogStream = SyslogStream();
+#endif
+TelnetSerialStream telnetSerialStream = TelnetSerialStream();
+
+TLog Log, Debug;
+
 static void setupRFID()
 {
   RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
   mfrc522.PCD_Init();
-  Serial.print("RFID Scanner: ");
+  Log.print("RFID Scanner: ");
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 }
 
@@ -114,18 +124,18 @@ static int loopRFID() {
     return 0;
   }
   if ( ! mfrc522.PICC_ReadCardSerial()) {
-    Serial.println("Bad read (was card removed too quickly ? )");
+    Log.println("Bad read (was card removed too quickly ? )");
     return 0;
   }
   if (mfrc522.uid.size < 3) {
-    Serial.println("Bad card (size tool small)");
+    Log.println("Bad card (size tool small)");
     return 0;
   };
 
   // We're somewhat strict on the parsing/what we accept; as we use it unadultared in the URL.
   //
   if (mfrc522.uid.size > sizeof(mfrc522.uid.uidByte)) {
-    Serial.println("Too large a card id size. Ignoring.)");
+    Log.println("Too large a card id size. Ignoring.)");
     return 0;
   }
 
@@ -135,7 +145,7 @@ static int loopRFID() {
     snprintf(buff, sizeof(buff), "%s%d", i ? "-" : "", mfrc522.uid.uidByte[i]);
     strncat(tag, buff, sizeof(tag) - 1);
   };
-  Serial.println("Good scan");
+  Log.println("Good scan");
 
   mfrc522.PICC_HaltA();
   return 1;
@@ -144,7 +154,7 @@ static int loopRFID() {
 void setupDisplay() {
   display.setBrightness(BRIGHT_7);
   display.showString(VERSION);
-  Serial.println("Display set to " VERSION);
+  Log.println("Display set to " VERSION);
 }
 
 void setup()
@@ -166,26 +176,44 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_NETWORK, WIFI_PASSWD);
 
-  Serial.print("Connecting to ");
-  Serial.println(WIFI_NETWORK);
+  Log.print("Connecting to ");
+  Log.println(WIFI_NETWORK);
   yield();
 
   display.showString("conn");
 
   WiFi.setHostname(terminalName);
 
-  Serial.print(terminalName);
-  Serial.println(" Wifi connecting");
+  Log.print(terminalName);
+  Log.println(" Wifi connecting");
 
 
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("Rebooting, wifi issue" );
+    Log.println("Rebooting, wifi issue" );
     display.showString("FAIL");
     delay(5000);
     ESP.restart();
   };
-  Serial.println("Connected.");
+  Log.println("Connected.");
   yield();
+
+
+#ifdef SYSLOG_HOST
+  syslogStream.setDestination(SYSLOG_HOST);
+  syslogStream.setRaw(true);
+#ifdef SYSLOG_PORT
+  syslogStream.setPort(SYSLOG_PORT);
+#endif
+  Log.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
+  Debug.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
+#endif
+
+  Log.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
+  Debug.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
+
+  Log.begin();
+  Log.println("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
+  Log.println(terminalName);
 
   // try to get some reliable time; to stop my cert
   // checking code complaining.
@@ -204,10 +232,11 @@ void setup()
   ArduinoOTA
   .onStart([]() {
     display.showString("PROG");
-
+    Log.println("OTA started");
   })
   .onEnd([]() {
     // prevent a cleversod uplading a special binary. ignore the hardware/serial angle
+    Log.println("OTA completed OK - need to wipe keystore before rebooting into new code.");
     wipekeys();
     display.showString("Done");
   })
@@ -230,15 +259,16 @@ void setup()
     else if (error == OTA_END_ERROR) label = "End Failed";
     else label = "Uknown error";
     display.showString(label);
+    Log.print("OTA error");
+    Log.println(label);
   });
 
 
   RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
   mfrc522.PCD_Init();
-  Serial.print("RFID Scanner: ");
   mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 
-  Serial.println("Starting loop");
+  Debug.println("Starting loop");
 
   display.setBrightness(BRIGHT_HIGH / 3);
   display.showString("----");
@@ -260,7 +290,7 @@ static void loop_RebootAtMidnight() {
     time_t now = time(nullptr);
     char * p = ctime(&now);
     p[5 + 11 + 3] = 0;
-    Serial.printf("%s Heap: %d Kb\n", p, (512 + heap_caps_get_free_size(MALLOC_CAP_INTERNAL)) / 1024UL);
+    Log.printf("%s Heap: %d Kb\n", p, (512 + heap_caps_get_free_size(MALLOC_CAP_INTERNAL)) / 1024UL);
   }
   time_t now = time(nullptr);
   if (now < 3600)
@@ -273,7 +303,7 @@ static void loop_RebootAtMidnight() {
   p[5] = 0;
 
   if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600UL) {
-    Serial.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
+    Log.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
     ESP.restart();
   }
 #endif
@@ -281,9 +311,10 @@ static void loop_RebootAtMidnight() {
 
 void loop()
 {
+  Log.loop();
   ArduinoOTA.handle();
   loop_RebootAtMidnight();
-  
+
   switch (md) {
     case WAITING_FOR_NTP:
       display.showString("ntp");
@@ -292,7 +323,7 @@ void loop()
       return;
       break;
     case FETCH_CA:
-      display.showString("ca");
+      display.showString("F CA");
       fetchCA();
       return;
     case REGISTER:
@@ -305,7 +336,7 @@ void loop()
         registerDevice();
       return;
     case REGISTER_PRICELIST:
-      display.showString("get");
+      display.showString("F PL");
       if (fetchPricelist())
         md = ENTER_AMOUNT;
       return;
@@ -330,12 +361,14 @@ void loop()
         display.setBrightness(BRIGHT_HIGH / 3);
         display.showNumber(amount, 2);
       };
+      break;
     case WIFI_FAIL_REBOOT:
-      for (int i = 0; i < 10; i++) {
+      { static unsigned long last = millis();
+        if (millis() - last > 10 * 1000)
+          ESP.restart();
         display.showString("NET FAIL");
-        delay(1000);
       };
-      ESP.restart();
+      break;
     default:
       break;
   };

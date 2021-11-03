@@ -21,6 +21,7 @@
 #include "mbedtls/error.h"
 
 #include "global.h"
+#include "log.h"
 #include "rest.h"
 #include "geneckey.h"
 #include "selfsign.h"
@@ -49,9 +50,9 @@ const unsigned short KS_VERSION = 0x100;
 #define REGISTER_PATH "/v2/register"
 #define PAY_PATH "/v2/pay"
 
-#define updateDisplay_progressText(x) { Serial.println(x); }
+#define updateDisplay_progressText(x) { Log.println(x); }
 #define updateDisplay()
-#define displayForceShowError(x) { Serial.println(x); }
+#define displayForceShowError(x) { Log.println(x); }
 
 static unsigned char hex_digit(unsigned char c) {
   return "0123456789ABCDEF"[c & 0x0F];
@@ -72,7 +73,7 @@ char *_argencode(char *dst, size_t n, char *src)
       *d++ = c;
     };
     if (d + 1 >= dst + n) {
-      Serial.println("Warning - buffer was too small. Truncating.");
+      Log.println("Warning - buffer was too small. Truncating.");
       break;
     }
   };
@@ -101,7 +102,7 @@ state_t setupAuth(const char * terminalName) {
   char tmp[65];
 
   if (!keystore.begin(KS_NAME, false))
-    Serial.println("Keystore open failed");
+    Log.println("Keystore open failed");
 
   unsigned short version = keystore.getUShort(KS_KEY_VERSION, 0);
   if (version != KS_VERSION ||
@@ -109,42 +110,42 @@ state_t setupAuth(const char * terminalName) {
       !getks(keystore, KS_KEY_CLIENT_KEY, &client_key_as_pem) ||
       !keystore.getBytes(KS_KEY_SERVER_KEY, sha256_server_key, 32))
   {
-    Serial.println("Incomplete/absent keystore");
+    Log.println("Incomplete/absent keystore");
     keystore.end();
     wipekeys();
 
     if (!keystore.begin(KS_NAME, false))
-      Serial.println("Keystore open failed");
+      Log.println("Keystore open failed");
 
     keystore.putUShort(KS_KEY_VERSION, KS_VERSION);
 
     geneckey(&key);
 
     if (0 != populate_self_signed(&key, terminalName, &crt)) {
-      Serial.println("Generation error. Aborting");
+      Log.println("Generation error. Aborting");
       keystore.end();
       return OEPSIE;
     }
 
     if (0 != sign_and_topem(&key, &crt, &client_cert_as_pem, &client_key_as_pem)) {
-      Serial.println("Derring error. Aborting");
+      Log.println("Derring error. Aborting");
       keystore.end();
       return OEPSIE;
     };
   } else {
-    Serial.printf("Using existing keys (keystore version 0x%03x), fully configured\n", version);
+    Log.printf("Using existing keys (keystore version 0x%03x), fully configured\n", version);
     paired = true;
   }
   keystore.end();
   fingerprint_from_pem(client_cert_as_pem, sha256_client);
 
-  Serial.print("Fingerprint (as shown in CRM): ");
-  Serial.println(sha256toHEX(sha256_client, tmp));
+  Log.print("Fingerprint (as shown in CRM): ");
+  Log.println(sha256toHEX(sha256_client, tmp));
   return ret;
 }
 
 void wipekeys() {
-  Serial.println("Wiping keystore");
+  Log.println("Wiping keystore");
   nvs_flash_erase(); // erase the NVS partition and...
   nvs_flash_init(); // initialize the NVS partition.
 }
@@ -161,18 +162,18 @@ bool fetchCA() {
 
   updateDisplay_progressText("fetching CA");
 
- 
+
   // Sadly required - due to a limitation in the current SSL stack we must
   // provide the root CA. but we do not know it (yet). So learn it first.
   //
   client.setInsecure();
   if (!https.begin(client, PAY_URL NONE_PATH )) {
-    Serial.println("Failed to begin https - fetchCA");
+    Log.println("Failed to begin https - fetchCA");
     goto exit;
   };
 
   if (https.GET() < 0) {
-    Serial.println("Failed to begin https (GET, fetchCA)");
+    Log.println("Failed to begin https (GET, fetchCA)");
     goto exit;
   };
 
@@ -220,24 +221,24 @@ bool registerDevice() {
              _argencode((char *) tmp, sizeof(tmp), terminalName));
 
     if (!https.begin(client, (const char*)buff)) {
-      Serial.println("Failed to begin https");
+      Log.println("Failed to begin https");
       goto exit;
     };
 
     httpCode =  https.GET();
     if (httpCode != 401) {
-      Serial.printf("Not gotten the 401 I expected; but %d: %s\n", httpCode, https.getString().c_str());
+      Log.printf("Not gotten the 401 I expected; but %d: %s\n", httpCode, https.getString().c_str());
       goto exit;
     };
     peer = client.getPeerCertificate();
     mbedtls_sha256_ret(peer->raw.p, peer->raw.len, sha256, 0);
     if (memcmp(sha256, sha256_server, 32)) {
-      Serial.println("Server changed mid registration. Aborting");
+      Log.println("Server changed mid registration. Aborting");
       goto exit;
     }
 
     nonce = strdup((https.getString().c_str()));
-    Serial.println("Got a NONCE - waiting for tag swipe");
+    Log.println("Got a NONCE - waiting for tag swipe");
     md = WAIT_FOR_REGISTER_SWIPE;
     updateDisplay();
     goto exit;
@@ -265,7 +266,7 @@ bool registerDevice() {
     snprintf((char *) buff, sizeof(buff),  PAY_URL REGISTER_PATH "?response=%s", (char *)tmp);
 
     if (!https.begin(client, (char *)buff )) {
-      Serial.println("Failed to begin https");
+      Log.println("Failed to begin https");
       goto exit;
     };
 
@@ -274,16 +275,16 @@ bool registerDevice() {
     peer = client.getPeerCertificate();
     mbedtls_sha256_ret(peer->raw.p, peer->raw.len, tmp, 0);
     if (memcmp(tmp, sha256_server, 32)) {
-      Serial.println("Server changed mid registration. Aborting");
+      Log.println("Server changed mid registration. Aborting");
       goto exit;
     }
 
     if (httpCode != 200) {
-      Serial.println("Failed to register");
+      Log.println("Failed to register");
       goto exit;
     }
 
-    Serial.println("Registration was accepted");
+    Log.println("Registration was accepted");
 
     mbedtls_sha256_init(&sha_ctx);
     mbedtls_sha256_starts_ret(&sha_ctx, 0);
@@ -294,7 +295,7 @@ bool registerDevice() {
     mbedtls_sha256_free(&sha_ctx);
 
     if (!https.getString().equalsIgnoreCase((char*)tmp)) {
-      Serial.println("Registered OK - but confirmation did not compute. Aborted.");
+      Log.println("Registered OK - but confirmation did not compute. Aborted.");
       goto exit;
     }
 
@@ -302,53 +303,53 @@ bool registerDevice() {
     // with Let's Encrypt - the cert itself is regularly renewed.
     //
     if (fingerprint_from_certpubkey(peer, sha256_server_key)) {
-      Serial.println("Extraction of public key of server failed. Aborted.");
+      Log.println("Extraction of public key of server failed. Aborted.");
       goto exit;
     };
 
     sha256toHEX(sha256_server_key, (char*)tmp);
-    Serial.print("Server public key SHA256: ");
-    Serial.println((char*)tmp);
+    Log.print("Server public key SHA256: ");
+    Log.println((char*)tmp);
 
     updateDisplay_progressText("OK");
     {
       Preferences keystore;
 
       if (!keystore.begin(KS_NAME, false))
-        Serial.println("Keystore open failed");
+        Log.println("Keystore open failed");
 
       if (keystore.getUShort(KS_KEY_VERSION, 0) != KS_VERSION)
-        Serial.println("**** NVS not working 2 *****");
+        Log.println("**** NVS not working 2 *****");
 
       keystore.putBytes(KS_KEY_CLIENT_CRT, client_cert_as_pem, strlen(client_cert_as_pem));
       keystore.putBytes(KS_KEY_CLIENT_KEY, client_key_as_pem, strlen(client_key_as_pem));
       keystore.putBytes(KS_KEY_SERVER_KEY, sha256_server_key, 32);
       keystore.end();
+
+      Log.println("Keys stored in NVS");
     }
     {
       Preferences keystore;
 
       keystore.begin(KS_NAME, false);
       if (keystore.getUShort(KS_KEY_VERSION, 0) != KS_VERSION)
-        Serial.println("**** NVS not working 3 *****");
+        Log.println("**** NVS not working 3 *****");
 
-      Serial.printf("version:            %x\n", keystore.getBytesLength(KS_KEY_VERSION));
-      Serial.printf("version:            %x\n", keystore.getUShort(KS_KEY_VERSION, -1));
-      Serial.printf("client_cert_as_pem: %x\n", keystore.getBytesLength(KS_KEY_CLIENT_CRT));
-      Serial.printf("client_key_as_pem:  %x\n", keystore.getBytesLength(KS_KEY_CLIENT_KEY));
-      Serial.printf("sha256_server_key:  %x\n", keystore.getBytesLength(KS_KEY_SERVER_KEY));
-
+      Debug.printf("version:            0x%x\n", keystore.getUShort(KS_KEY_VERSION, -1));
+      Debug.printf("client_cert_as_pem: 0x%x (len)\n", keystore.getBytesLength(KS_KEY_CLIENT_CRT));
+      Debug.printf("client_key_as_pem:  0x%x (len)\n", keystore.getBytesLength(KS_KEY_CLIENT_KEY));
+      Debug.printf("sha256_server_key:  0x%x (len)\n", keystore.getBytesLength(KS_KEY_SERVER_KEY));
 
       keystore.end();
     }
 
-    Serial.println("\nWe are fully paired - we've proven to each other we know the secret & there is no MITM.");
+    Log.println("\nWe are fully paired - we've proven to each other we know the secret & there is no MITM.");
     ok = true;
     md = REGISTER_PRICELIST;
     goto exit;
   };
 
-  Serial.println("odd - not in the price list phase yet..");
+  Log.println("odd - not in the price list phase yet..");
 exit:
   https.end();
   client.stop();
@@ -371,17 +372,19 @@ JSONVar rest(const char *url, int * statusCode) {
   https.setTimeout(HTTP_TIMEOUT);
 
   if (!https.begin(client, url)) {
-    Serial.println("setup fail");
+    Log.println("setup fail");
     return 999;
   };
 
   int httpCode = https.GET();
 
-  Serial.print("Result: ");
-  Serial.println(httpCode);
+  if (httpCode != 200) {
+    Log.print("Result: ");
+    Log.println(httpCode);
+  };
 
   if (httpCode < 0) {
-    Serial.println("Rebooting, wifi issue" );
+    Log.println("Rebooting, wifi issue" );
     md = WIFI_FAIL_REBOOT;
     displayForceShowError("NET FAIL");
     goto exit;
@@ -390,27 +393,27 @@ JSONVar rest(const char *url, int * statusCode) {
   }
 
   if (fingerprint_from_certpubkey( client.getPeerCertificate(), sha256)) {
-    Serial.println("Extraction of public key of server failed. Aborted.");
+    Log.println("Extraction of public key of server failed. Aborted.");
     httpCode = 999;
     goto exit;
   };
 
   if (0 != memcmp(sha256, sha256_server_key, 31)) {
-    Serial.println("Server pubkey changed. Aborting");
+    Log.println("Server pubkey changed. Aborting");
     httpCode = 666;
     goto exit;
   }
 
   payload = https.getString();
   if (httpCode == 200) {
-    Serial.print("Payload: ");
-    Serial.println(payload);
+    // Log.print("Payload: ");
+    // Log.println(payload);
     res = JSON.parse(payload);
   }  else  {
     label = https.errorToString(httpCode);
-    Serial.println(url);
-    Serial.println(payload);
-    Serial.printf("REST failed: %d - %s", httpCode, https.getString());
+    Log.println(url);
+    Log.println(payload);
+    Log.printf("REST failed: %d - %s", httpCode, https.getString());
   };
 exit:
   https.end();
@@ -431,8 +434,8 @@ int payByREST(char *tag, char * amount, char *lbl) {
     //
     snprintf(buff, sizeof(buff), PAY_URL PAY_PATH "?node=%s&src=%s&amount=%s&description=%s",
              terminalName, "XX-XX-XX-XXX", amount, _argencode(tmp, sizeof(tmp), desc));
-    Serial.print("URL : ");
-    Serial.println(buff);
+    Log.print((const char*)"URL : ");
+    Log.println(buff);
   };
   snprintf(buff, sizeof(buff), PAY_URL PAY_PATH "?node=%s&src=%s&amount=%s&description=%s",
            terminalName, tag, amount, _argencode(tmp, sizeof(tmp), desc));
@@ -447,8 +450,10 @@ int payByREST(char *tag, char * amount, char *lbl) {
     if (res.hasOwnProperty("result"))
       ok = (bool) res["result"];
 
-    if (!ok) {
-      Serial.println("200 Ok, but false / incpmplete result.");
+    if (ok) {
+      Log.println("Payment completed successfully.");
+    } else {
+      Log.println("200 Ok, but false / incpmplete result.");
       httpCode = 600;
     }
   };
@@ -468,14 +473,14 @@ bool fetchPricelist() {
     md = REGISTER;
   };
   if (httpCode != 200) {
-    Serial.println("SKU price list fetch failed.");
+    Log.println("SKU price list fetch failed.");
     return false;
   }
 
   const char * nme = res["name"];
   const char * desc = res["description"];
   if (!nme || !strlen(nme)) {
-    Serial.println("Bogus SKU or not yet assiged a station");
+    Log.println("Bogus SKU or not yet assiged a station");
     updateDisplay_progressText("no station assigned in CRM");
     return false;
   }
@@ -486,13 +491,13 @@ bool fetchPricelist() {
 
   len = res["pricelist"].length();
   if (len < 0 || len > 256) {
-    Serial.println("Bogus SKU price list");
+    Log.println("Bogus SKU price list");
     return false;
   }
 
   double  cap = res["max_permission_amount"];
   if (cap > 0) {
-    Serial.printf("Non default permission amount of %.2% euro\n", cap);
+    Log.printf("Non default permission amount of %.2% euro\n", cap);
     amount_no_ok_needed = cap;
   };
   amounts = (char **) malloc(sizeof(char *) * len);
@@ -510,9 +515,9 @@ bool fetchPricelist() {
     if (item["default"])
       amount = default_item = i;
 
-    Serial.printf("%12s %c %s\n", amounts[i], i == default_item ? '*' : ' ', prices[i]);
+    Log.printf("%12s %c %s\n", amounts[i], i == default_item ? '*' : ' ', prices[i]);
   };
-  Serial.printf("%d items total\n", len);
+  Log.printf("%d items total\n", len);
   NA = len;
   updateDisplay_progressText("got prices");
   return true;
