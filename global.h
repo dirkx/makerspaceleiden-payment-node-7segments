@@ -6,8 +6,12 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define VERSION "F1-05"
+#define VERSION "F1-06"
 
+/*  1.05 - 2021/11/04 - first productie release
+ *  1.06 - ?          - MQTT logging
+ */
+ 
 #ifndef TERMINAL_NAME
 #define TERMINAL_NAME "4x7"
 #endif

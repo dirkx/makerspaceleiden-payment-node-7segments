@@ -13,7 +13,7 @@
 //    MFRC522-spi-i2c-uart-async
 //    TM1637TinyDisplay
 //    Arduino_JSON
-//
+//    PubSub (for MQTT)
 
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
@@ -74,7 +74,10 @@ SyslogStream syslogStream = SyslogStream();
 
 #ifdef MQTT_HOST
 #include "MqttlogStream.h"
-MqttStream mqttStream = MqttStream();
+// EthernetClient client;
+WiFiClient client;
+MqttStream mqttStream = MqttStream(&client, MQTT_HOST);
+char topic[128] = "log/" TERMINAL_NAME;
 #endif
 
 TLog Log, Debug;
@@ -115,7 +118,6 @@ void setup()
   Log.print(terminalName);
   Log.println(" Wifi connecting");
 
-
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Log.println("Rebooting, wifi issue" );
     display.showString("FAIL");
@@ -143,14 +145,21 @@ void setup()
 #endif
 
 #ifdef MQTT_HOST
-  mqttStream.setDestination(MQTT_HOST);
+#ifdef MQTT_TOPIC_PREFIX
+  snprintf(topic, sizeof(topic), "%s/log/%s", MQTT_TOPIC_PREFIX, terminalName);
+  mqttStream.setTopic(topic);
+#endif
   Log.addPrintStream(std::make_shared<MqttStream>(mqttStream));
 #endif
 
   Log.begin();
   char * p =  __FILE__;
   if (rindex(p, '/')) p = rindex(p, '/') + 1;
-  Log.printf("Build: " __DATE__ " " __TIME__ "\nUnit:  %s\n", p);
+
+  Log.printf( "File:     %s\n", p);
+  Log.println("Firmware: " TERMINAL_NAME "-" VERSION);
+  Log.println("Build:    " __DATE__ " " __TIME__ );
+  Log.print(  "Unit:     ");
   Log.println(terminalName);
 
   setupRFID();
