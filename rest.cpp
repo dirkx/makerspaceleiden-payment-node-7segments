@@ -22,6 +22,7 @@
 
 #include "global.h"
 #include "log.h"
+#include "rfid.h"
 #include "rest.h"
 #include "geneckey.h"
 #include "selfsign.h"

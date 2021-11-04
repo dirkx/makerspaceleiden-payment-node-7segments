@@ -37,8 +37,8 @@
 // Wait up to 10 seconds for wifi during boot.
 #define WIFI_MAX_WAIT (20*1000)
 
-#ifndef NTP_POOL
-#define NTP_POOL "nl.pool.ntp.org"
+#ifndef NTP_SERVER
+#define NTP_SERVER "nl.pool.ntp.org"
 #endif
 
 #ifndef AMOUNT_NO_OK_NEEDED
@@ -59,6 +59,5 @@ extern double amount_no_ok_needed;
 extern state_t md;
 extern const char * version;
 extern char terminalName[64];
-extern char tag[128];
 extern String label;
 #endif

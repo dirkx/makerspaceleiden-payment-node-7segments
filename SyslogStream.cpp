@@ -10,34 +10,45 @@
 #include "SyslogStream.h"
 
 size_t SyslogStream::write(uint8_t c) {
-    
-    if (at >= sizeof(logbuff)-1) {
-        Log.println("Purged logbuffer");
-        at = 0;
-    };
-    
-    if (c >= 32 && c < 128)
-        logbuff[ at++ ] = c;
-    
-    if (c == '\n' || at >= sizeof(logbuff) - 1) {
-        
-        logbuff[at++] = 0;
-        at = 0;
-        
-        {
-            WiFiUDP syslog;
-            if (syslog.begin(_syslogPort)) {
-	    	if (_dest) 
-                	syslog.beginPacket(_dest, _syslogPort);
-		else
-                	syslog.beginPacket(WiFi.gatewayIP(), _syslogPort);
-		if (_raw)
-                	syslog.printf("%s\n", logbuff);
-		else
-                	syslog.printf("<135> NoTimeStamp %s %s", terminalName, logbuff);
-                syslog.endPacket();
-            };
+
+  if (at >= sizeof(logbuff) - 1) {
+    Log.println("Purged logbuffer (should never happen)");
+    at = 0;
+  };
+
+  if (c >= 32 && c < 128)
+    logbuff[ at++ ] = c;
+
+  if (c == '\n' || at >= sizeof(logbuff) - 1) {
+
+    logbuff[at++] = 0;
+    at = 0;
+
+    {
+      WiFiUDP syslog;
+
+      if (syslog.begin(_syslogPort)) {
+        if (_dest)
+          syslog.beginPacket(_dest, _syslogPort);
+        else
+          syslog.beginPacket(WiFi.gatewayIP(), _syslogPort);
+        if (_raw)
+          syslog.printf("%s\n", logbuff);
+        else {
+          time_t now = time(NULL);
+          char * p = "noTime";
+          if (now > 3600) {
+          //  0123456789012345678 9 0
+          // "Thu Nov  4 09:47:43\n\0" -> 09:47\0
+          p = ctime(&now);
+          p += 4; // See section 4.1.2 of RFC 4164
+          p[strlen(p)-1] = 0;
+          };
+          syslog.printf("<135> %s %s %s", p, terminalName, logbuff);
         };
+        syslog.endPacket();
+      };
     };
-    return 1;
+  };
+  return 1;
 }

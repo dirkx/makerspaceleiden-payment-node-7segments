@@ -15,34 +15,12 @@
 //    Arduino_JSON
 //
 
-
 #ifndef WIFI_NETWORK
 #define WIFI_NETWORK "MyWifiNetwork"
 #endif
 
 #ifndef WIFI_PASSWD
 #define WIFI_PASSWD "MyWifiPassword"
-#endif
-
-#ifndef PAYMENT_TERMINAL_BEARER
-// Must match line 245 in  makerspaceleiden/settings.py of https://github.com/MakerSpaceLeiden/makerspaceleiden-crm
-#define PAYMENT_TERMINAL_BEARER "not-so-very-secret-127.0.0.1"
-#endif
-
-#ifndef PAYMENT_URL
-#define PAYMENT_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/pay"
-#endif
-
-#ifndef SDU_URL
-#define SDU_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/pay"
-#endif
-
-#ifndef SKU_URL
-#define SKU_URL "https://test.makerspaceleiden.nl/test-server-crm/api/v1/sku"
-#endif
-
-#ifndef SKU
-#define SKU 1
 #endif
 
 #include <WiFi.h>
@@ -58,38 +36,22 @@
 
 #include "global.h"
 #include "log.h"
+#include "rfid.h"
 #include "rest.h"
-#include "SyslogStream.h"
+
 #include "TelnetSerialStream.h"
 
+// Wiring of 7 segment display - just
+// two wires. See https://www.mcielectronics.cl/website_MCI/static/documents/Datasheet_TM1637.pdf
+// and https://create.arduino.cc/projecthub/ryanchan/tm1637-digit-display-arduino-quick-tutorial-ca8a93
+//
 #define DISPLAY_CLK 25
 #define DISPLAY_DIO 26
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
 
-#if SKU == 1
-#define RFID_RESET    22
-#define RFID_IRQ      21
-#define RFID_CS       15
-#define RFID_SCLK     18
-#define RFID_MOSI     23
-#define RFID_MISO     19
-#else
-#define RFID_CS       5 // default VSPI wiring
-#define RFID_SCLK     18
-#define RFID_MOSI     23
-#define RFID_MISO     19
-#define RFID_RESET    21 // these two pins swapped on the older beer-node.
-#define RFID_IRQ      22
-#endif
-
-SPIClass RFID_SPI(VSPI);
-MFRC522_SPI spiDevice = MFRC522_SPI(RFID_CS, RFID_RESET, &RFID_SPI);
-MFRC522 mfrc522 = MFRC522(&spiDevice);
-
 // Very ugly global vars - used to communicate between the REST call and the rest.
 //
-
 char terminalName[64] = TERMINAL_NAME;
 int NA = 0;
 char **amounts = NULL;
@@ -101,55 +63,21 @@ double amount_no_ok_needed = AMOUNT_NO_OK_NEEDED;
 const char * version = VERSION;
 unsigned long device_specific_reboot_offset;
 String label;
-char tag[128];
 state_t md = BOOT;
 
-#ifdef SYSLOG_HOST
-SyslogStream syslogStream = SyslogStream();
-#endif
 TelnetSerialStream telnetSerialStream = TelnetSerialStream();
 
+#ifdef SYSLOG_HOST
+#include "SyslogStream.h"
+SyslogStream syslogStream = SyslogStream();
+#endif
+
+#ifdef MQTT_HOST
+#include "MqttlogStream.h"
+MqttStream mqttStream = MqttStream();
+#endif
+
 TLog Log, Debug;
-
-static void setupRFID()
-{
-  RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
-  mfrc522.PCD_Init();
-  Log.print("RFID Scanner: ");
-  mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
-}
-
-static int loopRFID() {
-  if ( ! mfrc522.PICC_IsNewCardPresent()) {
-    return 0;
-  }
-  if ( ! mfrc522.PICC_ReadCardSerial()) {
-    Log.println("Bad read (was card removed too quickly ? )");
-    return 0;
-  }
-  if (mfrc522.uid.size < 3) {
-    Log.println("Bad card (size tool small)");
-    return 0;
-  };
-
-  // We're somewhat strict on the parsing/what we accept; as we use it unadultared in the URL.
-  //
-  if (mfrc522.uid.size > sizeof(mfrc522.uid.uidByte)) {
-    Log.println("Too large a card id size. Ignoring.)");
-    return 0;
-  }
-
-  memset(tag, 0, sizeof(tag));
-  for (int i = 0; i < mfrc522.uid.size; i++) {
-    char buff[5]; // 3 digits, dash and \0.
-    snprintf(buff, sizeof(buff), "%s%d", i ? "-" : "", mfrc522.uid.uidByte[i]);
-    strncat(tag, buff, sizeof(tag) - 1);
-  };
-  Log.println("Good scan");
-
-  mfrc522.PICC_HaltA();
-  return 1;
-}
 
 void setupDisplay() {
   display.setBrightness(BRIGHT_7);
@@ -197,28 +125,35 @@ void setup()
   Log.println("Connected.");
   yield();
 
-
-#ifdef SYSLOG_HOST
-  syslogStream.setDestination(SYSLOG_HOST);
-  syslogStream.setRaw(true);
-#ifdef SYSLOG_PORT
-  syslogStream.setPort(SYSLOG_PORT);
-#endif
-  Log.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
-  Debug.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
-#endif
+  // try to get some reliable time; to stop my cert
+  // checking code complaining.
+  configTime(0, 0, NTP_SERVER);
+  yield();
 
   Log.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
   Debug.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
 
+#ifdef SYSLOG_HOST
+  syslogStream.setDestination(SYSLOG_HOST);
+  syslogStream.setRaw(false); // wether or not the syslog server is a modern(ish) unix.
+#ifdef SYSLOG_PORT
+  syslogStream.setPort(SYSLOG_PORT);
+#endif
+  Log.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
+#endif
+
+#ifdef MQTT_HOST
+  mqttStream.setDestination(MQTT_HOST);
+  Log.addPrintStream(std::make_shared<MqttStream>(mqttStream));
+#endif
+
   Log.begin();
-  Log.println("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
+  char * p =  __FILE__;
+  if (rindex(p, '/')) p = rindex(p, '/') + 1;
+  Log.printf("Build: " __DATE__ " " __TIME__ "\nUnit:  %s\n", p);
   Log.println(terminalName);
 
-  // try to get some reliable time; to stop my cert
-  // checking code complaining.
-  configTime(0, 0, "nl.pool.ntp.org");
-  yield();
+  setupRFID();
 
   ArduinoOTA.setHostname(terminalName);
 #ifdef OTA_HASH
@@ -263,11 +198,6 @@ void setup()
     Log.println(label);
   });
 
-
-  RFID_SPI.begin(RFID_SCLK, RFID_MISO, RFID_MOSI, RFID_CS);
-  mfrc522.PCD_Init();
-  mfrc522.PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
-
   Debug.println("Starting loop");
 
   display.setBrightness(BRIGHT_HIGH / 3);
@@ -276,7 +206,6 @@ void setup()
 
   md = WAITING_FOR_NTP;
 }
-
 
 static void loop_RebootAtMidnight() {
   static unsigned long lst = millis();
@@ -299,10 +228,13 @@ static void loop_RebootAtMidnight() {
 #ifdef AUTO_REBOOT_TIME
   now += device_specific_reboot_offset;
   char * p = ctime(&now);
+  //  0123456789012345678 9 0
+  // "Thu Nov  4 09:47:43\n\0" -> 09:47\0
   p += 11;
   p[5] = 0;
+  Debug.printf("strncmp(\"%s\",\"%s\",%d), %u, %u\n", p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME), now, millis());
 
-  if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600UL) {
+  if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600 ) {
     Log.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
     ESP.restart();
   }
@@ -332,8 +264,10 @@ void loop()
       return;
     case WAIT_FOR_REGISTER_SWIPE:
       display.showString("pair");
-      if (loopRFID())
+      if (loopRFID()) {
+        display.showString("vrfy");
         registerDevice();
+      };
       return;
     case REGISTER_PRICELIST:
       display.showString("F PL");

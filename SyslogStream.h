@@ -15,7 +15,7 @@ class SyslogStream : public TLog {
   private:
     const char * _dest;
     uint16_t _syslogPort;
-    char logbuff[1024];
+    char logbuff[256]; // 1024 seems to be to large for some syslogd's.
     size_t at = 0;
     bool _raw;
   protected:
