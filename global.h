@@ -66,4 +66,6 @@ extern const char * version;
 extern char terminalName[64];
 extern const char * stationname;
 extern String label;
+extern double paid;
+
 #endif

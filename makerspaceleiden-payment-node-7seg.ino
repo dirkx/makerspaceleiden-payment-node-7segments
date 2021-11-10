@@ -64,23 +64,7 @@ const char * version = VERSION;
 unsigned long device_specific_reboot_offset;
 String label;
 state_t md = BOOT;
-
-TelnetSerialStream telnetSerialStream = TelnetSerialStream();
-
-#ifdef SYSLOG_HOST
-#include "SyslogStream.h"
-SyslogStream syslogStream = SyslogStream();
-#endif
-
-#ifdef MQTT_HOST
-#include "MqttlogStream.h"
-// EthernetClient client;
-WiFiClient client;
-MqttStream mqttStream = MqttStream(&client, MQTT_HOST);
-char topic[128] = "log/" TERMINAL_NAME;
-#endif
-
-TLog Log, Debug;
+double paid = 0;
 
 void setupDisplay() {
   display.setBrightness(BRIGHT_7);
@@ -90,6 +74,9 @@ void setupDisplay() {
 
 void setup()
 {
+  char * p =  __FILE__;
+  if (rindex(p, '/')) p = rindex(p, '/') + 1;
+
   Serial.begin(115200);
   md = BOOT;
 
@@ -127,34 +114,13 @@ void setup()
   Log.println("Connected.");
   yield();
 
+  setupLog();
+
   // try to get some reliable time; to stop my cert
   // checking code complaining.
   configTime(0, 0, NTP_SERVER);
   yield();
 
-  Log.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
-  Debug.addPrintStream(std::make_shared<TelnetSerialStream>(telnetSerialStream));
-
-#ifdef SYSLOG_HOST
-  syslogStream.setDestination(SYSLOG_HOST);
-  syslogStream.setRaw(false); // wether or not the syslog server is a modern(ish) unix.
-#ifdef SYSLOG_PORT
-  syslogStream.setPort(SYSLOG_PORT);
-#endif
-  Log.addPrintStream(std::make_shared<SyslogStream>(syslogStream));
-#endif
-
-#ifdef MQTT_HOST
-#ifdef MQTT_TOPIC_PREFIX
-  snprintf(topic, sizeof(topic), "%s/log/%s", MQTT_TOPIC_PREFIX, terminalName);
-  mqttStream.setTopic(topic);
-#endif
-  Log.addPrintStream(std::make_shared<MqttStream>(mqttStream));
-#endif
-
-  Log.begin();
-  char * p =  __FILE__;
-  if (rindex(p, '/')) p = rindex(p, '/') + 1;
 
   Log.printf( "File:     %s\n", p);
   Log.println("Firmware: " TERMINAL_NAME "-" VERSION);
@@ -222,14 +188,6 @@ static void loop_RebootAtMidnight() {
     return;
   lst = millis();
 
-  static unsigned long debug = 0;
-  if (millis() - debug > 60 * 60 * 1000) {
-    debug = millis();
-    time_t now = time(nullptr);
-    char * p = ctime(&now);
-    p[5 + 11 + 3] = 0;
-    Log.printf("%s Heap: %d Kb\n", p, (512 + heap_caps_get_free_size(MALLOC_CAP_INTERNAL)) / 1024UL);
-  }
   time_t now = time(nullptr);
   if (now < 3600)
     return;
@@ -252,7 +210,7 @@ static void loop_RebootAtMidnight() {
 
 void loop()
 {
-  Log.loop();
+  log_loop();
   ArduinoOTA.handle();
   loop_RebootAtMidnight();
 
@@ -293,6 +251,7 @@ void loop()
         if (status == 200) {
           display.showString("PAID");
           delay(500);
+          paid += atof(prices[amount]);
         } else {
           for (int i = 0; i < 4; i++) {
             display.showString("FAIL");

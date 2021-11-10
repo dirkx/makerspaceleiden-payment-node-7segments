@@ -26,7 +26,7 @@ void TelnetSerialStream::begin() {
   _server = new WiFiServer(_telnetPort);
   _server->begin();
 
-  Log.printf("Opened serial telnet on %s:%d\n", terminalName, _telnetPort);
+  Log.printf("Opened serial telnet on %s %s:%d\n", terminalName, WiFi.localIP().toString().c_str(), _telnetPort);
 };
 
 void TelnetSerialStream::stop() {
