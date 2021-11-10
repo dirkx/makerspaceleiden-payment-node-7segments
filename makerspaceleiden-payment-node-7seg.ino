@@ -98,7 +98,7 @@ void setup()
   snprintf(terminalName, sizeof(terminalName), "%s-%s-%02x%02x%02x", TERMINAL_NAME, 1 + VERSION, mac[3], mac[4], mac[5]);
   device_specific_reboot_offset = (*(unsigned short*)(mac + 4)) % 3600;
 
-  Serial.println("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
+  Serial.print("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
   Serial.println(terminalName);
 
   setupDisplay();
@@ -153,14 +153,17 @@ void setup()
 #endif
 
   Log.begin();
-  char * p =  __FILE__;
-  if (rindex(p, '/')) p = rindex(p, '/') + 1;
+
 
   Log.printf( "File:     %s\n", p);
   Log.println("Firmware: " TERMINAL_NAME "-" VERSION);
   Log.println("Build:    " __DATE__ " " __TIME__ );
   Log.print(  "Unit:     ");
   Log.println(terminalName);
+  Log.print(  "MacAddr:  ");
+  Log.println(WiFi.macAddress());
+  Log.print(  "IP:     ");
+  Log.println(WiFi.localIP());
 
   setupRFID();
 
@@ -253,6 +256,7 @@ static void loop_RebootAtMidnight() {
 void loop()
 {
   Log.loop();
+  Debug.loop();
   ArduinoOTA.handle();
   loop_RebootAtMidnight();
 
