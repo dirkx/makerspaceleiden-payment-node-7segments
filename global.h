@@ -9,7 +9,8 @@
 #define VERSION "F1-06"
 
 /*  1.05 - 2021/11/04 - first productie release
- *  1.06 - ?          - MQTT logging
+ *  1.06 - 2021/11/09 - MQTT logging
+ *  1.07 - ??         - generalized RFID pinout.
  */
  
 #ifndef TERMINAL_NAME
@@ -63,5 +64,8 @@ extern double amount_no_ok_needed;
 extern state_t md;
 extern const char * version;
 extern char terminalName[64];
+extern const char * stationname;
 extern String label;
+extern double paid;
+
 #endif

@@ -4,5 +4,5 @@
 extern char tag[128];
 void setupRFID();
 int loopRFID();
-
+extern unsigned int rfid_scans, rfid_miss;
 #endif

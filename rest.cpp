@@ -43,7 +43,7 @@ const char * KS_KEY_CLIENT_CRT = "ccap";
 const char * KS_KEY_CLIENT_KEY = "ckap";
 const char * KS_KEY_SERVER_KEY = "ssk";
 
-const char * stationname = NULL;
+const char * stationname = "unset";
 
 const unsigned short KS_VERSION = 0x100;
 
@@ -172,6 +172,8 @@ bool fetchCA() {
     Log.println("Failed to begin https - fetchCA");
     goto exit;
   };
+  https.setTimeout(HTTP_TIMEOUT);
+  https.setUserAgent(terminalName);
 
   if (https.GET() < 0) {
     Log.println("Failed to begin https (GET, fetchCA)");
@@ -225,6 +227,8 @@ bool registerDevice() {
       Log.println("Failed to begin https");
       goto exit;
     };
+    https.setTimeout(HTTP_TIMEOUT);
+    https.setUserAgent(terminalName);
 
     httpCode =  https.GET();
     if (httpCode != 401) {
@@ -370,12 +374,12 @@ JSONVar rest(const char *url, int * statusCode) {
   client.setCertificate(client_cert_as_pem);
   client.setPrivateKey(client_key_as_pem);
 
-  https.setTimeout(HTTP_TIMEOUT);
-
   if (!https.begin(client, url)) {
     Log.println("setup fail");
     return 999;
   };
+  https.setTimeout(HTTP_TIMEOUT);
+  https.setUserAgent(terminalName);
 
   int httpCode = https.GET();
 
@@ -407,14 +411,11 @@ JSONVar rest(const char *url, int * statusCode) {
 
   payload = https.getString();
   if (httpCode == 200) {
-    // Log.print("Payload: ");
-    // Log.println(payload);
     res = JSON.parse(payload);
   }  else  {
     label = https.errorToString(httpCode);
-    Log.println(url);
-    Log.println(payload);
-    Log.printf("REST failed: %d - %s", httpCode, https.getString());
+    Debug.println(payload);
+    Log.printf("REST failed: %d - %s", httpCode, payload.c_str());
   };
 exit:
   https.end();
@@ -515,7 +516,7 @@ bool fetchPricelist() {
     if (item["default"])
       amount = default_item = i;
 
-    Log.printf("%12s %c %s\n", amounts[i], i == default_item ? '*' : ' ', prices[i]);
+    Debug.printf("%12s %c %s\n", amounts[i], i == default_item ? '*' : ' ', prices[i]);
   };
   NA = len;
   updateDisplay_progressText("got prices");

@@ -6,24 +6,28 @@
 
 #include "log.h"
 
+
 class MqttStream : public TLog {
   public:
     const char * name() {
       return "MqttStream";
     }
-    MqttStream(Client * client, const char * mqttServer = NULL, const char * mqttTopic = "log", const uint16_t mqttPort = 1833) :
-      _client(client), _mqttServer(mqttServer), _mqttTopic(mqttTopic), _mqttPort(mqttPort) {};
+    MqttStream(Client * client, const char * mqttServer = NULL, const char * mqttTopic = NULL, const uint16_t mqttPort = 1883) :
+      _client(client), _mqttServer(mqttServer), _mqttTopic(mqttTopic), _mqttPort(mqttPort) {
+    };
 
     void setPort(uint16_t port) {
       _mqttPort = port;
     }
 
-    void setServer(const char * topic) {
-      _mqttTopic = topic;
+    void setTopic(const char * topic) {
+      if (topic)
+        _mqttTopic = strdup(topic);
     }
 
-    void setTopic(const char * server) {
-      _mqttServer = server;
+    void setServer(const char * server) {
+      if (server)
+        _mqttServer = strdup(server);
     }
 
     virtual size_t write(uint8_t c);
@@ -35,7 +39,7 @@ class MqttStream : public TLog {
     PubSubClient * _mqtt = NULL;
     const char * _mqttServer, * _mqttTopic;
     uint16_t _mqttPort;
-    char logbuff[200]; // 256 is the normal mqtt msg max.
+    char logbuff[220]; // 256 is the normal mqtt msg max.
     size_t at = 0;
   protected:
 };
