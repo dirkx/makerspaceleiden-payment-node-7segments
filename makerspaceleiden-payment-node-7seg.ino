@@ -66,6 +66,8 @@ String label;
 state_t md = BOOT;
 double paid = 0;
 
+int countdown = 0;
+
 void setupDisplay() {
   display.setBrightness(BRIGHT_7);
   display.showString(VERSION);
@@ -74,7 +76,7 @@ void setupDisplay() {
 
 void setup()
 {
-  char * p =  __FILE__;
+  const char * p =  (const char*) __FILE__;
   if (rindex(p, '/')) p = rindex(p, '/') + 1;
 
   Serial.begin(115200);
@@ -85,7 +87,7 @@ void setup()
   snprintf(terminalName, sizeof(terminalName), "%s-%s-%02x%02x%02x", TERMINAL_NAME, 1 + VERSION, mac[3], mac[4], mac[5]);
   device_specific_reboot_offset = (*(unsigned short*)(mac + 4)) % 3600;
 
-  Serial.print("\n\n\Build: " __DATE__ " " __TIME__ "\nUnit:  " __FILE__);
+  Serial.print("\n\nBuild: " __DATE__ " " __TIME__ "\nUnit: ");
   Serial.println(terminalName);
 
   setupDisplay();
@@ -164,12 +166,12 @@ void setup()
     l = w;
   })
   .onError([](ota_error_t error) {
-    char * label;
-    if (error == OTA_AUTH_ERROR) label = "Auth Failed";
-    else if (error == OTA_BEGIN_ERROR) label = "Begin Failed";
-    else if (error == OTA_CONNECT_ERROR) label = "Connect Failed";
-    else if (error == OTA_RECEIVE_ERROR) label = "Receive Failed";
-    else if (error == OTA_END_ERROR) label = "End Failed";
+    const char * label;
+    if (error == OTA_AUTH_ERROR) label = (const char*) "Auth Failed";
+    else if (error == OTA_BEGIN_ERROR) label = (const char*) "Begin Failed";
+    else if (error == OTA_CONNECT_ERROR) label = (const char*) "Connect Failed";
+    else if (error == OTA_RECEIVE_ERROR) label = (const char*) "Receive Failed";
+    else if (error == OTA_END_ERROR) label = (const char*)  "End Failed";
     else label = "Uknown error";
     display.showString(label);
     Log.print("OTA error");
@@ -202,7 +204,7 @@ static void loop_RebootAtMidnight() {
   // "Thu Nov  4 09:47:43\n\0" -> 09:47\0
   p += 11;
   p[5] = 0;
-  Debug.printf("strncmp(\"%s\",\"%s\",%d), %u, %u\n", p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME), now, millis());
+  Debug.printf("strncmp(\"%s\",\"%s\",%d), %ld, %lu\n", p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME), now, millis());
 
   if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600 ) {
     Log.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
@@ -211,8 +213,53 @@ static void loop_RebootAtMidnight() {
 #endif
 }
 
+int checkcardswipe() {
+  int v = 0;
+
+  if (NA <= 0)
+    return v;
+
+  if (!loopRFID())
+    return v;
+
+  display.setBrightness(BRIGHT_HIGH);
+  display.showString("[--]");
+
+  int status = payByREST(tag, prices[amount], descs[amount]);
+
+  if (status == 200) {
+    display.showString("PAID");
+    delay(500);
+    paid += atof(prices[amount]);
+
+    // bit of a hack - if the description is normal - things work as a one
+    // off payment. But if the descripton starts with a number; then we assume
+    // that this is a `timed in minutes' item. Annd we return how many seconds
+    // the timer should be increased by.
+    //
+    // If the description is normal - the atoi() returns 0; so the function
+    // will return zero.
+    //
+    v =  60 * atoi(descs[amount]);
+    paid_seconds += v;
+  } else {
+    for (int i = 0; i < 4; i++) {
+      display.showString("FAIL");
+      delay(500);
+      display.showNumber(status);
+      delay(500);
+    };
+  };
+
+  display.setBrightness(BRIGHT_HIGH / 3);
+  display.showNumber(amount, 2);
+  return v;
+}
+
 void loop()
 {
+  static unsigned long lst = millis();
+
   log_loop();
   ArduinoOTA.handle();
   loop_RebootAtMidnight();
@@ -245,28 +292,57 @@ void loop()
         md = ENTER_AMOUNT;
       return;
     case ENTER_AMOUNT:
+
       display.setBrightness(BRIGHT_HIGH / 3);
       display.showNumber(atof(prices[amount]), 2);
-      if (NA > 0 && loopRFID()) {
-        display.setBrightness(BRIGHT_HIGH);
-        display.showString("[--]");
-        int status = payByREST(tag, prices[amount], descs[amount]);
-        if (status == 200) {
-          display.showString("PAID");
-          delay(500);
-          paid += atof(prices[amount]);
-        } else {
-          for (int i = 0; i < 4; i++) {
-            display.showString("FAIL");
-            delay(500);
-            display.showNumber(status);
-            delay(500);
-          };
-        };
-        display.setBrightness(BRIGHT_HIGH / 3);
-        display.showNumber(amount, 2);
-      };
+      // Bit of a hack - some swipes can return a number of seconds; when
+      // they are not a one off payment for something - but entitle you to
+      // something like 15 minutes of heating.
+      // the value returned is in seconds.
+      countdown +=  checkcardswipe();
+      if (countdown > 0) {
+        md = IN_COUNTDOWN;
+        lst = millis();
+      }
       break;
+    case IN_COUNTDOWN:
+      {
+        // catch up as needed.
+        while (millis() - lst >= 1000)
+        {
+          countdown--;
+          lst += 1000;
+        }
+
+        // flash display 1.5 times a second in last minute.
+        if (countdown < 60) {
+          display.setBrightness(((millis() / 300) & 1) ? BRIGHT_HIGH : BRIGHT_HIGH / 2);
+        };
+
+        if (countdown <= 0) {
+          countdown = 0;
+          display.showString("00:00");
+
+          // flash aggressivily once time is up.
+          //
+          for (int i = 0; i < 20; i++) {
+            display.setBrightness((i & 1) ? BRIGHT_HIGH : 0);
+            delay(200);
+          };
+
+          // go back to normal
+          md = ENTER_AMOUNT;
+          break;
+        };
+
+        // Check for a swipe while we are counting down, but do not reset millis().
+        countdown += checkcardswipe();
+
+        char timeleft[32];
+        snprintf(timeleft, sizeof(timeleft) - 1, "%02d:%02d", countdown / 60, countdown % 60);
+        display.showString(timeleft);
+        break;
+      }
     case WIFI_FAIL_REBOOT:
       { static unsigned long last = millis();
         if (millis() - last > 10 * 1000)

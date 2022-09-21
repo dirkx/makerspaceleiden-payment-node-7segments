@@ -156,8 +156,8 @@ bool fetchCA() {
   HTTPClient https;
 
   const mbedtls_x509_crt *peer ;
-  unsigned char sha256[256 / 8];
-  int httpCode;
+  // unsigned char sha256[256 / 8];
+  // int httpCode;
   bool ok = false;
   JSONVar res;
 
@@ -498,7 +498,7 @@ bool fetchPricelist() {
 
   double  cap = res["max_permission_amount"];
   if (cap > 0) {
-    Debug.printf("Non default permission amount of %.2% euro\n", cap);
+    Debug.printf("Non default permission amount of %.2f euro\n", cap);
     amount_no_ok_needed = cap;
   };
   amounts = (char **) malloc(sizeof(char *) * len);

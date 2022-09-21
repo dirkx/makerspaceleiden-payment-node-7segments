@@ -15,8 +15,10 @@
 
 void MqttStream::begin() {
   if (!_mqttServer || !_mqttTopic || !_mqttPort) {
-    Log.printf("Missing%s for MQTT Logging\n",
-               _mqttServer ? "" : " server", _mqttTopic ? "" : " topic", _mqttPort ? "" : " port");
+    Log.printf("Missing%s%s%s for MQTT Logging\n",
+               _mqttServer ? "" : " server", 
+               _mqttTopic ? "" : " topic", 
+               _mqttPort ? "" : " port");
     return;
   }
   

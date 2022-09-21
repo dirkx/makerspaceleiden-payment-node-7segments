@@ -6,11 +6,12 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define VERSION "F1-06"
+#define VERSION "F1-07"
 
 /*  1.05 - 2021/11/04 - first productie release
  *  1.06 - 2021/11/09 - MQTT logging
  *  1.07 - ??         - generalized RFID pinout.
+ *  1.08 - 2022/09/21 - add countdown timer ability for heating
  */
  
 #ifndef TERMINAL_NAME
@@ -50,7 +51,7 @@
 #define AMOUNT_NO_OK_NEEDED (5.0)
 #endif
 
-typedef enum { BOOT = 0, WAITING_FOR_NTP, FETCH_CA, REGISTER, WAIT_FOR_REGISTER_SWIPE, REGISTER_PRICELIST, ENTER_AMOUNT, PAID, FIRMWARE_UPDATE, FIRMWARE_FAIL, REGISTER_FAIL, OEPSIE, WIFI_FAIL_REBOOT } state_t;
+typedef enum { BOOT = 0, WAITING_FOR_NTP, FETCH_CA, REGISTER, WAIT_FOR_REGISTER_SWIPE, REGISTER_PRICELIST, ENTER_AMOUNT, PAID, IN_COUNTDOWN, FIRMWARE_UPDATE, FIRMWARE_FAIL, REGISTER_FAIL, OEPSIE, WIFI_FAIL_REBOOT } state_t;
 
 // keep all ugly globals in one place for now.
 //
@@ -67,5 +68,6 @@ extern char terminalName[64];
 extern const char * stationname;
 extern String label;
 extern double paid;
+extern unsigned long paid_seconds;
 
 #endif

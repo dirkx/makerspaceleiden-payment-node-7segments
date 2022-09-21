@@ -84,11 +84,12 @@ void log_loop() {
 
   Log.printf("%s {\"rfid_scans\":%u,\"rfid_misses\":%u,"\
              "\"ota\":true,\"state\":3,\"IP_address\":\"%s\","\
-             "\"Mac_address\":\"%s\",\"Paid\":%.2f,\"Version\":\"%s\"," \
+             "\"Mac_address\":\"%s\",\"Paid\":%.2f,\"PaidSeconds\":%lu,\"Version\":\"%s\"," \
              "\"Firmware\":\"%s\",\"heap\":%u,\"coreTemp\": %.1f,\"loopRate\":%.1f}\n",
              stationname, rfid_scans, rfid_miss,
              WiFi.localIP().toString().c_str(),
-             String(WiFi.macAddress()).c_str(), paid,
+             String(WiFi.macAddress()).c_str(),
+             paid, paid_seconds,
              VERSION, terminalName,
              heap_caps_get_free_size(MALLOC_CAP_INTERNAL), coreTemp(), lr);
 
