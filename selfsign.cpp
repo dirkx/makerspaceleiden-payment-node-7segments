@@ -20,14 +20,25 @@
 
 #include "log.h"
 
-
 #include "esp_log.h"
 #include "esp_heap_caps.h"
-static const char* TAG = "selfsign";
+// static const char* TAG = "selfsign";
+
+#ifndef RDN_DN_O
+#define RDN_DN_O "Stichting Makerspace Leiden"
+#endif
+
+#ifndef RDN_DN_L
+#define RDN_DN_L "Leiden"
+#endif
+
+#ifndef RDN_DN_C
+#define RDN_DN_C "NL"
+#endif
 
 #define DFL_VERSION             MBEDTLS_X509_CRT_VERSION_3
 
-#define DFL_SUBJECT_NAME        "CN=%s,O=Stichting Makerspace Leiden,L=Leiden,C=NL"
+#define DFL_SUBJECT_NAME        "CN=%s,O=" RDN_DN_O ",L=" RDN_DN_L ",C=" RDN_DN_C
 #define DFL_ISSUER_NAME         DFL_SUBJECT_NAME
 #define DFL_DIGEST              MBEDTLS_MD_SHA256
 #define DFL_NOT_BEFORE          "20211004000000"
@@ -178,7 +189,6 @@ int sign_and_topem(mbedtls_pk_context * key, mbedtls_x509write_cert * crt,  char
   unsigned char * tmp = NULL, * cp = NULL, *kp = NULL;
   char buf[48];
   int ret;
-  int outkeylen = -1, outcertlen = -1;
 
   mbedtls_entropy_context entropy_ctx;
   mbedtls_ctr_drbg_context ctr_drbg;

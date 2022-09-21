@@ -65,6 +65,7 @@ unsigned long device_specific_reboot_offset;
 String label;
 state_t md = BOOT;
 double paid = 0;
+unsigned long paid_seconds = 0;
 
 int countdown = 0;
 
