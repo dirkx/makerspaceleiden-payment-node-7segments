@@ -1,7 +1,7 @@
 // dirkx@webweaving.org, apache license, for the makerspaceleiden.nl
 //
 // Tools settings:
-//  Board ESP32 WRover Module
+//  Board ESP32 
 //  Port: [the COM port your board has connected to]
 //
 // Boards used:
@@ -28,6 +28,7 @@
 
 #ifndef WIFI_PASSWD
 #define WIFI_PASSWD "MyWifiPassword"
+#error "You prolly do not want this!"
 #endif
 
 #include <WiFi.h>
@@ -196,13 +197,12 @@ void setup()
     l = w;
   })
   .onError([](ota_error_t error) {
-    const char * label;
+    const char * label = "FO:OF";
     if (error == OTA_AUTH_ERROR) label = (const char*) "FO:AF";
     else if (error == OTA_BEGIN_ERROR) label = (const char*) "FO:BF";
     else if (error == OTA_CONNECT_ERROR) label = (const char*) "FO:CF";
     else if (error == OTA_RECEIVE_ERROR) label = (const char*) "FO:RF";
     else if (error == OTA_END_ERROR) label = (const char*)  "FO:EF";
-    else label = "FO:OF";
     display.showString(label);
     Log.print("OTA error: E=");
     Log.print(error);
@@ -363,20 +363,21 @@ void loop()
         };
 
         if (countdown <= 0) {
-          heatingOnOff(false);
           countdown = 0;
 
           // flash aggressivily once time is up.
           //
-          for (int i = 0; i < 30; i++) {
+          for (int i = 0; i < 20; i++) {
             display.setBrightness((i & 1) ? BRIGHT_HIGH : BRIGHT_LOW);
             display.showString("0000");
-            delay(100);
+            delay(120);
             display.showString("----");
-            delay(100);
+            delay( 70);
           };
 
-          // go back to normal
+          // go back to normal, switch things off.
+          //
+          heatingOnOff(false);
           md = ENTER_AMOUNT;
           break;
         };
