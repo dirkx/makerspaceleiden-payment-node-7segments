@@ -9,6 +9,13 @@
 //    MFRC522 (https://www.tinytronics.nl/shop/nl/communicatie-en-signalen/draadloos/rfid/rfid-kit-mfrc522-s50-mifare-met-kaart-en-key-tag)
 //    7 segment display ( https://www.hobbyelectronica.nl/product/4-digit-klok-display-module)
 //
+// Heater module
+//  ESP32 Dev Module
+//  MFRC522
+//  7 segment display
+//  NPN transistor, 10k, 1k resistor
+//  25Ampere, 5volt relay
+//
 // Additional Librariries (via Sketch -> library manager):
 //    MFRC522-spi-i2c-uart-async
 //    TM1637TinyDisplay
@@ -45,10 +52,13 @@
 // two wires. See https://www.mcielectronics.cl/website_MCI/static/documents/Datasheet_TM1637.pdf
 // and https://create.arduino.cc/projecthub/ryanchan/tm1637-digit-display-arduino-quick-tutorial-ca8a93
 //
-#define DISPLAY_CLK 25
-#define DISPLAY_DIO 26
+#define DISPLAY_CLK (25)
+#define DISPLAY_DIO (26)
 
 TM1637TinyDisplay display(DISPLAY_CLK, DISPLAY_DIO);
+
+// For the heater
+#define RELAY (12)
 
 // Very ugly global vars - used to communicate between the REST call and the rest.
 //
@@ -75,6 +85,21 @@ void setupDisplay() {
   Log.println("Display set to " VERSION);
 }
 
+void setupRelay() {
+  // relay is high-active; but there is a 10k
+  // pulldown past the 1k driving resistor to
+  // not let HiZ engage the relay.
+  //
+  digitalWrite(RELAY, 0);
+  pinMode(RELAY, OUTPUT);
+  digitalWrite(RELAY, 0);
+}
+
+
+void heatingOnOff(bool onOff) {
+  digitalWrite(RELAY, onOff ? HIGH : LOW);
+}
+
 void setup()
 {
   const char * p =  (const char*) __FILE__;
@@ -91,6 +116,7 @@ void setup()
   Serial.print("\n\nBuild: " __DATE__ " " __TIME__ "\nUnit: ");
   Serial.println(terminalName);
 
+  setupRelay();
   setupDisplay();
   setupAuth(terminalName);
 
@@ -151,10 +177,13 @@ void setup()
     Log.println("OTA started");
   })
   .onEnd([]() {
+    Log.println("OTA completed");
     // prevent a cleversod uplading a special binary. ignore the hardware/serial angle
     Log.println("OTA completed OK - need to wipe keystore before rebooting into new code.");
     wipekeys();
     display.showString("Done");
+    log_stop();
+    heatingOnOff(false);
   })
   .onProgress([](unsigned int progress, unsigned int total) {
     static int l = -100;
@@ -168,15 +197,18 @@ void setup()
   })
   .onError([](ota_error_t error) {
     const char * label;
-    if (error == OTA_AUTH_ERROR) label = (const char*) "Auth Failed";
-    else if (error == OTA_BEGIN_ERROR) label = (const char*) "Begin Failed";
-    else if (error == OTA_CONNECT_ERROR) label = (const char*) "Connect Failed";
-    else if (error == OTA_RECEIVE_ERROR) label = (const char*) "Receive Failed";
-    else if (error == OTA_END_ERROR) label = (const char*)  "End Failed";
-    else label = "Uknown error";
+    if (error == OTA_AUTH_ERROR) label = (const char*) "FO:AF";
+    else if (error == OTA_BEGIN_ERROR) label = (const char*) "FO:BF";
+    else if (error == OTA_CONNECT_ERROR) label = (const char*) "FO:CF";
+    else if (error == OTA_RECEIVE_ERROR) label = (const char*) "FO:RF";
+    else if (error == OTA_END_ERROR) label = (const char*)  "FO:EF";
+    else label = "FO:OF";
     display.showString(label);
-    Log.print("OTA error");
+    Log.print("OTA error: E=");
+    Log.print(error);
+    Log.print(" - ");
     Log.println(label);
+    delay(10 * 1000);
   });
 
   Debug.println("Starting loop");
@@ -205,10 +237,10 @@ static void loop_RebootAtMidnight() {
   // "Thu Nov  4 09:47:43\n\0" -> 09:47\0
   p += 11;
   p[5] = 0;
-  Debug.printf("strncmp(\"%s\",\"%s\",%d), %ld, %lu\n", p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME), now, millis());
 
-  if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600 ) {
-    Log.println("Nightly reboot - also to fetch new pricelist and fix any memory eaks.");
+  if (strncmp(p, AUTO_REBOOT_TIME, strlen(AUTO_REBOOT_TIME)) == 0 && millis() > 3600 * 1000 ) {
+    Log.println("Nightly reboot - also to fetch new pricelist and fix any memory leaks.");
+    heatingOnOff(false);
     ESP.restart();
   }
 #endif
@@ -265,6 +297,16 @@ void loop()
   ArduinoOTA.handle();
   loop_RebootAtMidnight();
 
+  // flap relay every 5 seconds for testing.
+  //
+  if (0) {
+    static unsigned long t = millis();
+    if (millis() - t > 5000) {
+      digitalWrite(RELAY, !digitalRead(RELAY));
+      t = millis();
+    }
+  }
+
   switch (md) {
     case WAITING_FOR_NTP:
       display.showString("ntp");
@@ -315,20 +357,23 @@ void loop()
           lst += 1000;
         }
 
-        // flash display 1.5 times a second in last minute.
-        if (countdown < 60) {
-          display.setBrightness(((millis() / 300) & 1) ? BRIGHT_HIGH : BRIGHT_HIGH / 2);
+        // flash display 1.5 times towards the end
+        if (countdown <= 60) {
+          display.setBrightness(((millis() / 300) & 1) ? BRIGHT_HIGH : BRIGHT_1 );
         };
 
         if (countdown <= 0) {
+          heatingOnOff(false);
           countdown = 0;
-          display.showString("00:00");
 
           // flash aggressivily once time is up.
           //
-          for (int i = 0; i < 20; i++) {
-            display.setBrightness((i & 1) ? BRIGHT_HIGH : 0);
-            delay(200);
+          for (int i = 0; i < 30; i++) {
+            display.setBrightness((i & 1) ? BRIGHT_HIGH : BRIGHT_LOW);
+            display.showString("0000");
+            delay(100);
+            display.showString("----");
+            delay(100);
           };
 
           // go back to normal
@@ -340,8 +385,9 @@ void loop()
         countdown += checkcardswipe();
 
         char timeleft[32];
-        snprintf(timeleft, sizeof(timeleft) - 1, "%02d:%02d", countdown / 60, countdown % 60);
-        display.showString(timeleft);
+        snprintf(timeleft, sizeof(timeleft) - 1, "%02d%02d", countdown / 60, countdown % 60);
+        display.showString(timeleft, 4, 0 /*pos*/, 0b01000000 /* dots */);
+        heatingOnOff(true);
         break;
       }
     case WIFI_FAIL_REBOOT:

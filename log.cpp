@@ -68,6 +68,11 @@ static double coreTemp() {
 }
 #endif
 
+void log_stop() {
+  Log.stop();
+  Debug.stop();
+}
+
 void log_loop() {
   static unsigned  long last_report = millis();
   static unsigned long cntr;

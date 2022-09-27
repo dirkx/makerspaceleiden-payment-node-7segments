@@ -60,4 +60,5 @@ extern TLog Debug;
 
 void setupLog();
 void log_loop();
+void log_stop();
 #endif

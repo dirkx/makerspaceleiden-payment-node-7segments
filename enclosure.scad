@@ -17,7 +17,17 @@ QUAD7_H_ASSYM=1;
 
 showdev=0;
 studs=0;
-version="v1.04";
+version="v1.05";
+
+// Two sizes possible -- outside dimensions
+//
+box_h= 98; box_w = 68; //  98 x 68 x 48mm
+// box_h=115; box_w = 90; // 115 x 90 x 55mm
+
+box_t=2;        // thickness walls
+box_space=1.5;  // space between the walls; as they are not that straight.
+
+
 /*
    v1.01   white print 15/10/2021 for box with transparant cover.
    v1.02   scanner 1mm lower, whole plate 2mm lower, rfid pillars narrower
@@ -28,6 +38,7 @@ version="v1.04";
    v1.04   Lowered main board by 2mm to prevent shorting 7x4 display 
            pins (Issue #2). Removed unused mid studs. Wider tiewrap
            holes for stud (Issue #3).
+   v1.05   flag for the 'larger' boxes; not yet correct.
 */
 module quad_holes(r=QUAD7_HD/2,h=10,top=1) {
    r2=r; r1=r*top;
@@ -132,8 +143,8 @@ translate([-WR_W/2,-WR_H/2,-WR_T]) {
 };
 
 
-MB_W=61;
-MB_H=91;
+MB_W=box_w-box_t*2-box_space*2;
+MB_H=box_h-box_t*2-box_space*2;
 MB_T=2;
 MB_P=45;
 MB_V=80;
@@ -154,6 +165,7 @@ module mb_pins(r=MB_HH/2,h=MB_T+0.01) {
    };
 };
 
+// Mounting board
 module mb(h=10) {
    difference() {
        union() {
@@ -187,6 +199,7 @@ module mb(h=10) {
            linear_extrude(height = 0.5)
            text("2021-10-15 / paymentnode",halign="center", valign="center",
                 size=2.5, font="Gill Sans:style=Bold");
+
 if (studs == 0) {
    translate([-70,0,0]) {
    difference() {

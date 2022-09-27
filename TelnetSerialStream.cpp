@@ -35,6 +35,7 @@ void TelnetSerialStream::stop() {
   for (int i = 0; i < MAX_SERIAL_TELNET_CLIENTS; i++) {
     if (_serverClients[i]) {
       _serverClients[i].println("Connection closed from remote end");
+      _serverClients[i].flush(); // appears to just flush the input buffer ???
       _serverClients[i].stop();
     }
   }

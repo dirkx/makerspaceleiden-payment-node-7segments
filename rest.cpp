@@ -251,6 +251,8 @@ bool registerDevice() {
 
   if (md == WAIT_FOR_REGISTER_SWIPE) {
     updateDisplay_progressText("sending credentials");
+    Log.println(nonce);
+    Log.println(tag);
 
     // Create the reply; SHA256(nonce, tag(secret), client, server);
     //
@@ -268,7 +270,23 @@ bool registerDevice() {
     sha256toHEX(sha256, (char*)tmp);
     mbedtls_sha256_free(&sha_ctx);
 
+
     snprintf((char *) buff, sizeof(buff),  PAY_URL REGISTER_PATH "?response=%s", (char *)tmp);
+
+    if (0) {
+      Debug.print("nonce=");
+      Debug.println(nonce);
+      Debug.print("tag=");
+      Debug.println(tag);
+      Debug.print("client=");
+      sha256toHEX(sha256_client, (char*)tmp);
+      Debug.println((char *)tmp);
+      Debug.print("server=");
+      sha256toHEX(sha256_server, (char*)tmp);
+      Debug.println((char *)tmp);
+      Debug.print("Result=");
+      Debug.println((char *)tmp);
+    };
 
     if (!https.begin(client, (char *)buff )) {
       Log.println("Failed to begin https");
@@ -286,6 +304,9 @@ bool registerDevice() {
 
     if (httpCode != 200) {
       Log.println("Failed to register");
+      // make sure we get a fresh nonce. So it cannot be a nonce timeout.
+      //
+      md = REGISTER;
       goto exit;
     }
 
@@ -342,7 +363,8 @@ bool registerDevice() {
 
       Debug.printf("version:            0x%x\n", keystore.getUShort(KS_KEY_VERSION, -1));
       Debug.printf("client_cert_as_pem: 0x%x (len)\n", keystore.getBytesLength(KS_KEY_CLIENT_CRT));
-      Debug.printf("client_key_as_pem:  0x%x (len)\n", keystore.getBytesLength(KS_KEY_CLIENT_KEY));
+      if (0)
+        Debug.printf("client_key_as_pem:  0x%x (len)\n", keystore.getBytesLength(KS_KEY_CLIENT_KEY));
       Debug.printf("sha256_server_key:  0x%x (len)\n", keystore.getBytesLength(KS_KEY_SERVER_KEY));
 
       keystore.end();
