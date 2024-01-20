@@ -270,7 +270,6 @@ bool registerDevice() {
     sha256toHEX(sha256, (char*)tmp);
     mbedtls_sha256_free(&sha_ctx);
 
-
     snprintf((char *) buff, sizeof(buff),  PAY_URL REGISTER_PATH "?response=%s", (char *)tmp);
 
     if (0) {
@@ -305,6 +304,11 @@ bool registerDevice() {
     if (httpCode != 200) {
       Log.println("Failed to register");
       // make sure we get a fresh nonce. So it cannot be a nonce timeout.
+      // Or should we display, to the user, some error to hint that
+      // his/her tag may not be enabled in the CRM - e.g. detect this
+      // on the httpCode and distinguish from an old nonce. Requires
+      // the 401's for a stale nonce and no-correlation on the backend
+      // to change.
       //
       md = REGISTER;
       goto exit;

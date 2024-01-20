@@ -1,7 +1,7 @@
 // dirkx@webweaving.org, apache license, for the makerspaceleiden.nl
 //
 // Tools settings:
-//  Board ESP32 
+//  Board ESP32
 //  Port: [the COM port your board has connected to]
 //
 // Boards used:
@@ -158,7 +158,7 @@ void setup()
   Log.println(terminalName);
   Log.print(  "MacAddr:  ");
   Log.println(WiFi.macAddress());
-  Log.print(  "IP:     ");
+  Log.print(  "IP:       ");
   Log.println(WiFi.localIP());
 
   setupRFID();
@@ -211,13 +211,13 @@ void setup()
     delay(10 * 1000);
   });
 
-  Debug.println("Starting loop");
 
   display.setBrightness(BRIGHT_HIGH / 3);
   display.showString("----");
   ArduinoOTA.begin();
 
   md = WAITING_FOR_NTP;
+  Debug.println("Setup() complete. Starting loop");
 }
 
 static void loop_RebootAtMidnight() {
@@ -333,6 +333,8 @@ void loop()
       display.showString("F PL");
       if (fetchPricelist())
         md = ENTER_AMOUNT;
+      else
+        display.showString("Er:NA");
       return;
     case ENTER_AMOUNT:
 
