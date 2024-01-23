@@ -6,7 +6,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-#define VERSION "F1-07"
+#define VERSION "F1-08"
 
 /*  1.05 - 2021/11/04 - first productie release
  *  1.06 - 2021/11/09 - MQTT logging

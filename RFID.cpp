@@ -18,17 +18,18 @@ void setupRFID()
   const unsigned char  RFID_SCLK  =   18;
   const unsigned char  RFID_MISO  =   19;
   const unsigned char  RFID_MOSI  =   23;
-  unsigned char  RFID_CS    =   5; // default VSPI wiring
-  unsigned char  RFID_RESET =   21; // these two pins swapped on the older beer-node.
-//  unsigned char  RFID_IRQ   =   22;
+  unsigned char        RFID_CS    =    5; // default VSPI wiring
+  unsigned char        RFID_RESET =   21; // these two pins swapped on the older beer-node.
+  unsigned char        RFID_IRQ   =   22;
 
   // 3C:71:BF:43:0F:E4 - oldest beer node with funny wiring.
   // Later units are as per above.
   WiFi.macAddress(mac);
   if (mac[3] == 0x43 && mac[4] == 0x0F  && mac[5] == 0xE4) {
     RFID_RESET =   22;
-//    RFID_IRQ   =   21;
     RFID_CS    =   15;
+    RFID_IRQ   =   21;
+    Serial.println("WARNING: Beer node - changing RST/CS wiring");
   };
 
   spi = new SPIClass(VSPI);
@@ -38,7 +39,7 @@ void setupRFID()
   mfrc522 = new MFRC522(spiDevice);
   mfrc522->PCD_Init();
 
-  Serial.print("RFID Scanner init.");
+  Serial.print("RFID:     ");
   mfrc522->PCD_DumpVersionToSerial();  // Show details of PCD - MFRC522 Card Reader details
 }
 
